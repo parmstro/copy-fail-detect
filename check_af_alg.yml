@@ -265,6 +265,7 @@
         - apply_remediation
         - cve_assessment.potentially_vulnerable
         - not cve_assessment.algif_aead_blacklisted
+        - blacklist_created is defined
         - blacklist_created is changed
         - ansible_os_family == "Debian"
 
@@ -274,6 +275,7 @@
         - apply_remediation
         - cve_assessment.potentially_vulnerable
         - not cve_assessment.algif_aead_blacklisted
+        - blacklist_created is defined
         - blacklist_created is changed
         - ansible_os_family == "RedHat"
 
@@ -285,6 +287,7 @@
       when:
         - apply_remediation
         - cve_assessment.potentially_vulnerable
+        - blacklist_created is defined
         - blacklist_created is changed
 
     - name: "REMEDIATION - Re-verify algif_aead is not loaded"
@@ -295,6 +298,7 @@
       when:
         - apply_remediation
         - cve_assessment.potentially_vulnerable
+        - blacklist_created is defined
         - blacklist_created is changed
 
     - name: "REMEDIATION - Display success message"
@@ -317,6 +321,7 @@
       when:
         - apply_remediation
         - cve_assessment.potentially_vulnerable
+        - blacklist_created is defined
         - blacklist_created is changed
 
     - name: Set remediation flag
@@ -325,6 +330,7 @@
       when:
         - apply_remediation
         - cve_assessment.potentially_vulnerable
+        - blacklist_created is defined
         - blacklist_created is changed
 
 - name: Create dynamic group for vulnerable hosts
