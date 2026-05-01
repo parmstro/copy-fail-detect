@@ -237,7 +237,7 @@
         - apply_remediation
         - cve_assessment.potentially_vulnerable
         - not cve_assessment.algif_aead_blacklisted
-        - rmmod_result is defined
+        - rmmod_result.rc is defined
 
     - name: "REMEDIATION - Create blacklist configuration for algif_aead"
       copy:
@@ -286,7 +286,7 @@
       changed_when: false
       when:
         - apply_remediation
-        - cve_assessment.potentially_vulnerable
+        - cve_assessment.algif_aead_module_exists
         - blacklist_created is defined
         - blacklist_created is changed
 
@@ -297,7 +297,7 @@
       failed_when: post_remediation_check.rc == 0
       when:
         - apply_remediation
-        - cve_assessment.potentially_vulnerable
+        - cve_assessment.algif_aead_module_exists
         - blacklist_created is defined
         - blacklist_created is changed
 
