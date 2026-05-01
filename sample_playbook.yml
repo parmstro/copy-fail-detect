@@ -1,0 +1,135 @@
+---
+# Sample Playbook for CVE-2026-31431 (Copy Fail) Mitigation
+#
+# This is a simple example showing how to use the cve_2026_31431 role
+# in your own playbooks.
+
+# =============================================================================
+# Example 1: Assessment Only (Recommended First Step)
+# =============================================================================
+# Run this first to identify vulnerable systems without making changes
+#
+# Usage: ansible-playbook sample_playbook.yml
+#
+- name: CVE-2026-31431 Assessment
+  hosts: all
+  become: true
+  gather_facts: true
+
+  roles:
+    - cve_2026_31431
+
+# =============================================================================
+# Example 2: Apply Module Blacklist Only (Safest Single Mitigation)
+# =============================================================================
+# Uncomment this play to apply only module blacklist mitigation
+#
+# Usage: ansible-playbook sample_playbook.yml -e "skip_assessment=true"
+#
+# - name: Apply Module Blacklist
+#   hosts: all
+#   become: true
+#   gather_facts: true
+#
+#   vars:
+#     apply_remediation: true
+#     mitigation_flags: 1  # Module blacklist only
+#
+#   roles:
+#     - cve_2026_31431
+
+# =============================================================================
+# Example 3: Apply Recommended Mitigations (Module Blacklist + SELinux + seccomp)
+# =============================================================================
+# Uncomment this play to apply the recommended defense-in-depth strategy
+# This is the recommended configuration for Enterprise Linux systems
+#
+# Usage: ansible-playbook sample_playbook.yml -e "skip_assessment=true"
+#
+# - name: Apply Recommended Mitigations
+#   hosts: all
+#   become: true
+#   gather_facts: true
+#
+#   vars:
+#     apply_remediation: true
+#     mitigation_flags: 7  # Module blacklist (1) + SELinux (2) + seccomp (4)
+#
+#   roles:
+#     - cve_2026_31431
+
+# =============================================================================
+# Example 4: Apply All Mitigations (For Modern Kernels with eBPF LSM)
+# =============================================================================
+# Uncomment this play to apply all available mitigations including eBPF LSM
+# Only works on systems with kernel 5.7+ and CONFIG_BPF_LSM=y
+#
+# Usage: ansible-playbook sample_playbook.yml -e "skip_assessment=true"
+#
+# - name: Apply All Mitigations
+#   hosts: all
+#   become: true
+#   gather_facts: true
+#
+#   vars:
+#     apply_remediation: true
+#     mitigation_flags: 15  # All mitigations (1 + 2 + 4 + 8)
+#
+#   roles:
+#     - cve_2026_31431
+
+# =============================================================================
+# Example 5: Customize for Web Servers
+# =============================================================================
+# Uncomment to apply seccomp protection to specific web services
+#
+# - name: Harden Web Services
+#   hosts: webservers
+#   become: true
+#   gather_facts: true
+#
+#   vars:
+#     apply_remediation: true
+#     mitigation_flags: 7
+#     # Override default service list
+#     seccomp_protected_services:
+#       - httpd
+#       - nginx
+#       - php-fpm
+#
+#   roles:
+#     - cve_2026_31431
+
+# =============================================================================
+# Example 6: Target Only Vulnerable Hosts
+# =============================================================================
+# This example shows how to assess first, then remediate only vulnerable hosts
+#
+# Step 1: Run assessment (creates vulnerable_hosts group)
+# ansible-playbook sample_playbook.yml
+#
+# Step 2: Remediate only vulnerable hosts
+# ansible-playbook sample_playbook.yml --limit vulnerable_hosts -e apply_remediation=true -e mitigation_flags=7
+
+# =============================================================================
+# Quick Reference: Mitigation Flags
+# =============================================================================
+#
+# Individual Flags:
+#   1 = Module Blacklist      (Prevents modprobe loading)
+#   2 = SELinux Policy        (Blocks at syscall level - RHEL/Fedora)
+#   4 = systemd seccomp       (Per-service filtering)
+#   8 = eBPF LSM              (Dynamic kernel enforcement - requires kernel 5.7+)
+#
+# Common Combinations:
+#   mitigation_flags: 1       # Module blacklist only (baseline)
+#   mitigation_flags: 3       # Module blacklist + SELinux (minimum recommended)
+#   mitigation_flags: 7       # Module blacklist + SELinux + seccomp (RECOMMENDED)
+#   mitigation_flags: 15      # All mitigations (modern systems only)
+#
+# How to Calculate Flags:
+#   Want Module Blacklist + SELinux? 1 + 2 = 3
+#   Want Module Blacklist + SELinux + seccomp? 1 + 2 + 4 = 7
+#   Want all four? 1 + 2 + 4 + 8 = 15
+#
+# =============================================================================

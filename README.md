@@ -16,26 +16,42 @@ The name **cfDr** is a play on "Copy Fail Doctor" - your trusted remedy for CVE-
 
 ## Quick Start
 
-### 1. Assessment Only (Default)
-Run the playbook to scan all hosts and identify vulnerable systems:
+### Simplest Usage (Recommended for New Users)
+
+Use the quickstart playbook for the easiest experience:
 
 ```bash
-ansible-playbook check_af_alg.yml
+# Step 1: Assess all hosts
+ansible-playbook quickstart.yml
+
+# Step 2: Apply recommended mitigations to vulnerable hosts
+ansible-playbook quickstart.yml --limit vulnerable_hosts -e apply_remediation=true
 ```
 
-### 2. Remediate All Vulnerable Hosts
-Apply the mitigation to all vulnerable hosts identified:
+See [`quickstart.yml`](quickstart.yml) - minimal 25-line playbook, ready to use.
+
+### Using the Role in Your Playbooks
+
+See [`sample_playbook.yml`](sample_playbook.yml) for multiple examples including:
+- Assessment only
+- Module blacklist only
+- Recommended mitigations (Module Blacklist + SELinux + seccomp)
+- All mitigations including eBPF LSM
+- Custom service configurations
+
+### Legacy Playbook (Original Single-File Implementation)
+
+The original monolithic playbook is still available:
 
 ```bash
+# Assessment
+ansible-playbook check_af_alg.yml
+
+# Remediation (module blacklist only)
 ansible-playbook check_af_alg.yml -e apply_remediation=true --limit vulnerable_hosts
 ```
 
-### 3. Remediate Specific Hosts
-Apply remediation to specific hosts:
-
-```bash
-ansible-playbook check_af_alg.yml -e apply_remediation=true --limit "host1,host2"
-```
+**Note**: New deployments should use the role-based approach (`quickstart.yml` or `sample_playbook.yml`) which supports multiple mitigation strategies.
 
 ## Playbook Features
 

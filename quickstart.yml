@@ -1,0 +1,27 @@
+---
+# Quickstart Playbook for CVE-2026-31431 Mitigation
+#
+# This is the simplest possible playbook to get started with cfDr.
+#
+# STEP 1: Run assessment to find vulnerable hosts
+#   ansible-playbook quickstart.yml
+#
+# STEP 2: Apply recommended mitigations to vulnerable hosts
+#   ansible-playbook quickstart.yml --limit vulnerable_hosts -e apply_remediation=true
+#
+
+- name: CVE-2026-31431 (Copy Fail) Protection
+  hosts: all
+  become: true
+  gather_facts: true
+
+  vars:
+    # Set to true to apply mitigations (default: false = assessment only)
+    apply_remediation: false
+
+    # Mitigation flags: 7 = Module Blacklist + SELinux + seccomp (recommended)
+    # Change to 1 for module blacklist only, or 15 for all mitigations
+    mitigation_flags: 7
+
+  roles:
+    - cve_2026_31431

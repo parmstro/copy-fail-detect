@@ -1,3 +1,43 @@
+## Quick Start with Sample Playbooks
+
+### For New Users: Quickstart Playbook
+
+The easiest way to get started is with `quickstart.yml` - a minimal, ready-to-use playbook:
+
+```bash
+# Step 1: Assess all hosts to find vulnerable systems
+ansible-playbook quickstart.yml
+
+# Step 2: Apply recommended mitigations to vulnerable hosts only
+ansible-playbook quickstart.yml --limit vulnerable_hosts -e apply_remediation=true
+```
+
+**What it does:**
+- Default: Assessment mode (no changes made)
+- With `-e apply_remediation=true`: Applies Module Blacklist + SELinux + seccomp (flag 7)
+- Automatically creates `vulnerable_hosts` group for targeted remediation
+
+**File:** [`quickstart.yml`](quickstart.yml) - Just 25 lines, fully commented
+
+### For Learning: Sample Playbook
+
+See `sample_playbook.yml` for comprehensive examples:
+
+**File:** [`sample_playbook.yml`](sample_playbook.yml)
+
+**Contains 6 examples:**
+1. Assessment only (default)
+2. Module blacklist only (safest single mitigation)
+3. Recommended mitigations (Module Blacklist + SELinux + seccomp)
+4. All mitigations including eBPF LSM
+5. Custom configuration for web servers
+6. Two-step assess-then-remediate workflow
+
+**Usage:** Uncomment the example you want to try and run:
+```bash
+ansible-playbook sample_playbook.yml
+```
+
 ## Role-Based Architecture
 
 The CVE-2026-31431 mitigation has been refactored into a professional Ansible role with the following improvements:
