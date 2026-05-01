@@ -356,15 +356,31 @@ sudo modprobe algif_aead
 
 ## References
 
+### CVE Information and Analysis
 - [Sysdig - CVE-2026-31431 Analysis](https://www.sysdig.com/blog/cve-2026-31431-copy-fail-linux-kernel-flaw-lets-local-users-gain-root-in-seconds)
 - [The Hacker News - Copy Fail Vulnerability](https://thehackernews.com/2026/04/new-linux-copy-fail-vulnerability.html)
 - [CERT-EU Security Advisory](https://cert.europa.eu/publications/security-advisories/2026-005/)
 - [Help Net Security - Copy Fail Details](https://www.helpnetsecurity.com/2026/04/30/copyfail-linux-lpe-vulnerability-cve-2026-31431/)
 
+### Related Mitigation Projects
+- [Block-copyfail](https://github.com/atgreen/block-copyfail) - eBPF LSM implementation by Anthony Green
+- [Blastwall](https://gprocunier.github.io/blastwall/demo.html) - SELinux policy framework by Greg Procunier
+
 ## Support
 
 For issues or questions about this playbook, review the output logs and JSON reports generated in `/tmp/`.
 
+## Contributors
+
+cfDr is built on the collective expertise of security professionals:
+
+- **Paul Armstrong** (@parmstro) - Project Lead, Module Blacklist & seccomp implementations
+- **Anthony Green** (@atgreen) - Initial eBPF LSM mitigation implementation
+- **Greg Procunier** (@gprocunier) - Initial SELinux policy mitigation implementation
+- **Claude Sonnet 4.5** - Development assistance, documentation, and research
+
+See [CONTRIBUTORS.md](CONTRIBUTORS.md) for complete contribution details and how to contribute.
+
 ## License
 
-This playbook is provided as-is for vulnerability assessment and remediation purposes.
+This project is provided under the MIT License for vulnerability assessment and remediation purposes.

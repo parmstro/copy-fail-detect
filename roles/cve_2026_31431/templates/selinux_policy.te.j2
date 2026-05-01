@@ -4,6 +4,7 @@ policy_module({{ selinux_policy_module }}, {{ selinux_policy_version }})
 # CVE-2026-31431 (Copy Fail) Mitigation
 # SELinux policy to deny AF_ALG socket creation
 #
+# Initial implementation: Greg Procunier (@gprocunier)
 # Applied: {{ ansible_date_time.iso8601 }}
 # Host: {{ inventory_hostname }}
 #

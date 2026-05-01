@@ -1,5 +1,8 @@
 # SELinux Mitigation for CVE-2026-31431
 
+> **Initial implementation by Greg Procunier (@gprocunier)**  
+> **SELinux expertise**: [Blastwall](https://gprocunier.github.io/blastwall/demo.html) - SELinux policy framework
+
 ## Overview
 
 Instead of blacklisting the kernel module, we can use SELinux to prevent unprivileged processes from creating AF_ALG sockets entirely. This blocks the exploit at the syscall level before it ever reaches the vulnerable kernel code.

@@ -1,5 +1,6 @@
 ---
 # SELinux policy remediation for CVE-2026-31431
+# Initial implementation by Greg Procunier (@gprocunier)
 
 - name: "SELINUX - Check if policy is already installed"
   command: semodule -l

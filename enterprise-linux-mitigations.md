@@ -323,3 +323,27 @@ This would give you a comprehensive Enterprise Linux mitigation solution!
 | Non-systemd process | ✅ Blocks | ✅ Blocks | ❌ N/A | Protected |
 
 **No single layer is perfect - defense in depth is key!**
+
+## References and Related Projects
+
+### eBPF-based Solutions
+- **[Block-copyfail](https://github.com/atgreen/block-copyfail)** by Anthony Green (@atgreen)
+  - Original eBPF LSM implementation for CVE-2026-31431
+  - Standalone BPF program for kernel-level protection
+  - Reference implementation that inspired cfDr's eBPF mitigation
+
+### SELinux Frameworks
+- **[Blastwall](https://gprocunier.github.io/blastwall/demo.html)** by Greg Procunier (@gprocunier)
+  - SELinux policy framework and development tools
+  - Enterprise security hardening best practices
+  - Reference for cfDr's SELinux policy implementation
+
+### CVE Research and Documentation
+- [Sysdig CVE-2026-31431 Analysis](https://www.sysdig.com/blog/cve-2026-31431-copy-fail-linux-kernel-flaw-lets-local-users-gain-root-in-seconds)
+- [The Hacker News - Copy Fail](https://thehackernews.com/2026/04/new-linux-copy-fail-vulnerability.html)
+- [CERT-EU Security Advisory](https://cert.europa.eu/publications/security-advisories/2026-005/)
+
+### cfDr Project
+- **Repository**: https://github.com/parmstro/cfDr
+- **Contributors**: See [CONTRIBUTORS.md](CONTRIBUTORS.md)
+- **Documentation**: See [README.md](README.md) and [ROLE_USAGE.md](ROLE_USAGE.md)

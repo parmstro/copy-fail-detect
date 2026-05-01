@@ -1,5 +1,6 @@
 ---
 # eBPF LSM remediation for CVE-2026-31431
+# Initial implementation by Anthony Green (@atgreen)
 
 - name: "EBPF - Install required packages"
   package:

@@ -378,9 +378,14 @@ Check service logs and adjust `seccomp_protected_services` list.
 
 MIT
 
-## Author
+## Authors and Contributors
 
-Paul Armstrong (with assistance from Claude Sonnet 4.5)
+- **Paul Armstrong** (@parmstro) - Project Lead, Role Architecture, Module Blacklist & seccomp
+- **Anthony Green** (@atgreen) - Initial eBPF LSM mitigation implementation
+- **Greg Procunier** (@gprocunier) - Initial SELinux policy mitigation implementation
+- **Claude Sonnet 4.5** - Development assistance, documentation, and research
+
+See [CONTRIBUTORS.md](../../CONTRIBUTORS.md) for complete details and how to contribute.
 
 ## References
 

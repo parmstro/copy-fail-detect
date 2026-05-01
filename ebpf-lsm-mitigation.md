@@ -1,5 +1,8 @@
 # eBPF LSM Mitigation for CVE-2026-31431
 
+> **Initial implementation by Anthony Green (@atgreen)**  
+> **Based on**: [Block-copyfail](https://github.com/atgreen/block-copyfail)
+
 ## Overview
 
 eBPF LSM (Linux Security Modules) allows you to write custom security policies as eBPF programs that hook into kernel security decision points. This provides system-wide protection by intercepting socket creation at the LSM layer.
