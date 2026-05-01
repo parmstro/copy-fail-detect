@@ -159,19 +159,13 @@ depmod -a
 **Pros:** Module cannot be loaded by any method  
 **Cons:** May break if kernel is reinstalled; requires restoration if needed
 
-### 2. SELinux/AppArmor Module Loading Policy
-For systems with SELinux or AppArmor, you can create policies that prevent loading specific modules:
+### 2. SELinux Policy (RECOMMENDED for Enterprise Linux)
+For RHEL/CentOS/Fedora systems, SELinux can block AF_ALG socket creation at the syscall level - preventing exploitation even if the module is loaded.
 
-```bash
-# SELinux example (requires policy development)
-# Create custom policy denying algif_aead module loads
+**See [selinux-mitigation.md](selinux-mitigation.md) for complete implementation guide**
 
-# AppArmor example (requires profile development)
-# Add module loading restrictions to kernel profiles
-```
-
-**Pros:** Policy-enforced protection  
-**Cons:** Complex to implement; requires SELinux/AppArmor expertise
+**Pros:** Default on RHEL/CentOS/Fedora; blocks at LSM layer; cannot be bypassed  
+**Cons:** Requires SELinux in Enforcing mode; some policy knowledge helpful
 
 ### 3. Kernel Module Signing with Lockdown
 Enable kernel module signature enforcement:
@@ -197,6 +191,64 @@ ausearch -k module_insertion --start today
 
 **Pros:** Detects bypass attempts  
 **Cons:** Reactive, not preventive
+
+### 5. systemd seccomp Restrictions
+For individual services, systemd can block AF_ALG socket creation via seccomp filters:
+
+**See [seccomp-mitigation.md](seccomp-mitigation.md) for implementation guide**
+
+```ini
+# Add to service unit files:
+[Service]
+RestrictAddressFamilies=~AF_ALG
+```
+
+**Pros:** Simple systemd directive; per-service control; works without SELinux  
+**Cons:** Per-service configuration needed; only protects systemd services
+
+### 6. eBPF LSM (RHEL 9+ / Fedora)
+For modern kernels (5.7+), eBPF LSM programs can provide dynamic, programmable security policies:
+
+**See [ebpf-lsm-mitigation.md](ebpf-lsm-mitigation.md) for implementation guide**
+
+**Pros:** Very flexible; system-wide; real-time updates  
+**Cons:** Requires modern kernel; higher complexity; requires setup
+
+## Alternative Mitigation Strategies
+
+This playbook implements **module blacklisting** as the baseline mitigation. For Enterprise Linux environments (RHEL, CentOS, Fedora), several alternative or complementary approaches are available:
+
+| Method | Complexity | Enterprise Linux Support | Recommended |
+|--------|------------|-------------------------|-------------|
+| **Module Blacklist** | Low | ✅ All versions | ✅ Baseline |
+| **SELinux Policy** | Medium | ✅ All versions (default) | ✅ **PRIMARY** |
+| **systemd seccomp** | Low | ✅ All versions | ✅ Per-service |
+| **eBPF LSM** | High | RHEL 9+, Fedora 34+ | ⚠️ Advanced |
+
+### For Complete Enterprise Linux Guidance:
+
+📘 **[enterprise-linux-mitigations.md](enterprise-linux-mitigations.md)** - Comprehensive comparison and deployment guide for RHEL/CentOS/Fedora environments
+
+**Key Recommendations:**
+1. **RHEL 8/9**: Deploy SELinux policy as primary defense + module blacklist as backup
+2. **Critical Services**: Add systemd seccomp restrictions for defense-in-depth
+3. **Modern Systems**: Consider eBPF LSM for advanced use cases (RHEL 9+ only)
+
+### Defense-in-Depth Strategy
+
+**Best Practice: Use multiple layers**
+
+```
+┌─────────────────────────────────────┐
+│  Layer 1: SELinux (syscall blocking) │  ← Primary defense
+├─────────────────────────────────────┤
+│  Layer 2: Module Blacklist          │  ← Prevents modprobe loading
+├─────────────────────────────────────┤
+│  Layer 3: systemd seccomp           │  ← Service-level hardening
+└─────────────────────────────────────┘
+```
+
+If any layer is bypassed, the others still provide protection.
 
 ## Output and Reporting
 
