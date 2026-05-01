@@ -70,21 +70,66 @@ The playbook performs comprehensive vulnerability assessment:
 **Blacklist the algif_aead kernel module**
 
 ### Description
-This remediation prevents the vulnerable algif_aead module from being loaded into the kernel, effectively mitigating CVE-2026-31431. The module is unloaded if currently active and blacklisted to prevent future loading.
+
+This remediation creates a modprobe blacklist configuration that prevents the algif_aead kernel module from being loaded. The blacklist uses two mechanisms:
+
+1. **`blacklist algif_aead`** - Prevents automatic module loading (hardware detection, udev rules, etc.)
+2. **`install algif_aead /bin/true`** - Intercepts explicit `modprobe` commands and runs `/bin/true` instead
+
+The blacklist configuration is added to `/etc/modprobe.d/` and the initramfs/initrd is updated so the protection persists across reboots.
+
+### How It Works
+
+**Immediate Protection (No Reboot):**
+- Currently loaded module is unloaded with `rmmod`
+- Blacklist prevents immediate re-loading
+- Effective within seconds
+
+**Persistent Protection (After Reboot):**
+- Updated initramfs/initrd contains the blacklist
+- Module won't load during boot process
+- Protection survives kernel updates that preserve initramfs
+
+### Protection Scope
+
+| Attack Vector | Protected? | Mechanism |
+|---------------|------------|-----------|
+| `modprobe algif_aead` | ✅ Yes | `install` directive intercepts and runs `/bin/true` |
+| Auto-loading via dependencies | ✅ Yes | `install` directive handles dependency resolution |
+| Module loading at boot | ✅ Yes | Blacklist embedded in initramfs/initrd |
+| Kernel module auto-probing | ✅ Yes | `blacklist` directive prevents auto-load |
+| `insmod /path/to/algif_aead.ko` | ❌ **NO** | Direct kernel insertion bypasses modprobe |
+| Root decompressing .ko.xz and loading | ❌ **NO** | Kernel doesn't enforce blacklists at this level |
+
+### Limitations
+
+**Important Security Note:** This remediation protects against the typical CVE-2026-31431 attack chain (unprivileged user → load module → exploit → root), but a **root user with malicious intent** can bypass the blacklist using:
+
+```bash
+# Blacklist does NOT prevent:
+insmod /lib/modules/$(uname -r)/kernel/crypto/algif_aead.ko.xz
+
+# Or after decompression:
+insmod /tmp/algif_aead.ko
+```
+
+**Why this is acceptable:** The vulnerability requires **local code execution** to exploit. If an attacker already has root access, they can already run the exploit directly or load the module via `insmod`. The blacklist prevents **privilege escalation** from unprivileged → root, which is the primary attack vector.
 
 ### Implications
 
 #### ✓ Positive Effects
-- **Eliminates** local privilege escalation vector
-- **No reboot required** - effective immediately
-- **Persists across reboots** via blacklist configuration
+- **Mitigates CVE-2026-31431** for standard attack vectors
+- **No reboot required** - protection active immediately
+- **Persists across reboots** and kernel updates
+- **Handles module dependencies** - dependent modules can't force-load algif_aead
 - **Reversible** - can be undone if needed
 
 #### ⚠ Cautions
-- Applications using AF_ALG AEAD crypto operations may fail
-- Rarely affects production systems (algif_aead is infrequently used)
+- **Root users can bypass** via `insmod` (requires insider threat model)
+- **Applications using AF_ALG AEAD crypto** may fail (very rare)
 - Does **not** affect standard system crypto operations (SSL/TLS, SSH, etc.)
 - This is a **temporary workaround** - kernel patches are the permanent fix
+- **Dependent modules**: Any module depending on algif_aead will fail to load
 
 ### When to Apply
 
@@ -94,6 +139,64 @@ This remediation prevents the vulnerable algif_aead module from being loaded int
 | Development systems | Apply with caution, test applications first |
 | Systems with custom crypto | Verify no AF_ALG usage before applying |
 | Critical infrastructure | Apply immediately, monitor for issues |
+
+## Advanced Security Measures
+
+If you require protection against malicious root users or insider threats who could bypass the modprobe blacklist, consider these additional hardening measures:
+
+### 1. Remove Module File (Most Effective)
+```bash
+# Backup the module
+cp /lib/modules/$(uname -r)/kernel/crypto/algif_aead.ko.xz /root/backup/
+
+# Remove the module file
+rm /lib/modules/$(uname -r)/kernel/crypto/algif_aead.ko.xz
+
+# Update module dependencies
+depmod -a
+```
+
+**Pros:** Module cannot be loaded by any method  
+**Cons:** May break if kernel is reinstalled; requires restoration if needed
+
+### 2. SELinux/AppArmor Module Loading Policy
+For systems with SELinux or AppArmor, you can create policies that prevent loading specific modules:
+
+```bash
+# SELinux example (requires policy development)
+# Create custom policy denying algif_aead module loads
+
+# AppArmor example (requires profile development)
+# Add module loading restrictions to kernel profiles
+```
+
+**Pros:** Policy-enforced protection  
+**Cons:** Complex to implement; requires SELinux/AppArmor expertise
+
+### 3. Kernel Module Signing with Lockdown
+Enable kernel module signature enforcement:
+
+```bash
+# Only allow signed modules (requires UEFI Secure Boot)
+# Set in kernel parameters: module.sig_enforce=1
+```
+
+**Pros:** Prevents loading of any unsigned/modified modules  
+**Cons:** Requires complete module signing infrastructure
+
+### 4. Monitoring and Alerting
+Monitor for module loading attempts:
+
+```bash
+# Audit rule to detect module loading
+auditctl -a always,exit -F arch=b64 -S init_module -S finit_module -F key=module_insertion
+
+# Monitor audit log
+ausearch -k module_insertion --start today
+```
+
+**Pros:** Detects bypass attempts  
+**Cons:** Reactive, not preventive
 
 ## Output and Reporting
 

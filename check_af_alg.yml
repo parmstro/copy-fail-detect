@@ -92,6 +92,17 @@
       changed_when: false
       failed_when: false
 
+    - name: Check for modules that depend on algif_aead
+      shell: |
+        if lsmod | grep -q algif_aead; then
+          lsmod | awk '$4 ~ /algif_aead/ {print $1}' | grep -v algif_aead || echo "NONE"
+        else
+          echo "MODULE_NOT_LOADED"
+        fi
+      register: algif_aead_dependents
+      changed_when: false
+      failed_when: false
+
     - name: Check kernel config for CONFIG_CRYPTO_USER_API_AEAD
       shell: |
         if [ -f /boot/config-{{ kernel_version.stdout }} ]; then
@@ -113,6 +124,7 @@
           kernel_in_vulnerable_range: "{{ kernel_in_vuln_range }}"
           algif_aead_module_exists: "{{ algif_aead_modinfo.rc == 0 }}"
           algif_aead_currently_loaded: "{{ lsmod_algif_aead.rc == 0 }}"
+          dependent_modules: "{{ algif_aead_dependents.stdout }}"
           active_af_alg_sockets: "{{ lsof_af_alg.rc == 0 }}"
           algif_aead_blacklisted: "{{ 'blacklist algif_aead' in algif_blacklist_check.stdout or 'install algif_aead /bin/true' in algif_blacklist_check.stdout }}"
           crypto_config: "{{ crypto_aead_config.stdout }}"
@@ -150,6 +162,7 @@
           - "  - Kernel in vulnerable range (>=4.10): {{ cve_assessment.kernel_in_vulnerable_range }}"
           - "  - algif_aead module exists: {{ cve_assessment.algif_aead_module_exists }}"
           - "  - algif_aead currently loaded: {{ cve_assessment.algif_aead_currently_loaded }}"
+          - "{% if cve_assessment.algif_aead_currently_loaded and cve_assessment.dependent_modules not in ['NONE', 'MODULE_NOT_LOADED'] %}  - Dependent modules: {{ cve_assessment.dependent_modules }}{% endif %}"
           - "  - Active AF_ALG sockets: {{ cve_assessment.active_af_alg_sockets }}"
           - "  - Module blacklisted: {{ cve_assessment.algif_aead_blacklisted }}"
           - ""
@@ -183,25 +196,34 @@
           - "  Blacklist the algif_aead kernel module"
           - ""
           - "DESCRIPTION:"
-          - "  This remediation prevents the vulnerable algif_aead module from being"
-          - "  loaded into the kernel, effectively mitigating CVE-2026-31431."
-          - "  The module will be unloaded if currently active and blacklisted"
-          - "  to prevent future loading."
+          - "  Creates a modprobe blacklist that prevents algif_aead from loading."
+          - "  Uses 'install algif_aead /bin/true' to intercept load attempts."
+          - "  Updates initramfs/initrd so protection persists across reboots."
           - ""
           - "ACTIONS PERFORMED:"
-          - "  1. Unload algif_aead module if currently loaded"
-          - "  2. Create blacklist configuration in /etc/modprobe.d/"
-          - "  3. Update initramfs/initrd (if applicable)"
-          - "  4. Verify remediation success"
+          - "  1. Unload algif_aead module if currently loaded (rmmod)"
+          - "  2. Create blacklist: /etc/modprobe.d/blacklist-algif_aead-cve-2026-31431.conf"
+          - "     - blacklist algif_aead (prevents auto-loading)"
+          - "     - install algif_aead /bin/true (blocks modprobe attempts)"
+          - "  3. Update initramfs/initrd (blacklist active on boot)"
+          - "  4. Verify module cannot be loaded via modprobe"
+          - ""
+          - "PROTECTION SCOPE:"
+          - "  ✓ Blocks: modprobe algif_aead (manual loading)"
+          - "  ✓ Blocks: Auto-loading via module dependencies"
+          - "  ✓ Blocks: Boot-time loading (via updated initramfs/initrd)"
+          - "  ✓ Persists: Across reboots (blacklist in boot image)"
+          - "  ✗ DOES NOT BLOCK: insmod /path/to/algif_aead.ko (direct kernel load)"
+          - "  ✗ DOES NOT BLOCK: Root user with physical/console access"
           - ""
           - "IMPLICATIONS:"
-          - "  ✓ POSITIVE: Eliminates local privilege escalation vector"
+          - "  ✓ POSITIVE: Mitigates CVE-2026-31431 for normal attack vectors"
           - "  ✓ POSITIVE: No reboot required (effective immediately)"
-          - "  ✓ POSITIVE: Persists across reboots via blacklist config"
+          - "  ✓ POSITIVE: Persists across reboots and kernel updates"
           - ""
-          - "  ⚠ CAUTION: Applications using AF_ALG AEAD crypto may fail"
-          - "  ⚠ CAUTION: Rarely used; typically only affects custom crypto implementations"
-          - "  ⚠ CAUTION: Does not affect standard system crypto operations"
+          - "  ⚠ CAUTION: Root can bypass via insmod (requires insider threat model)"
+          - "  ⚠ CAUTION: Applications using AF_ALG AEAD crypto may fail (rare)"
+          - "  ⚠ CAUTION: Does not affect standard system crypto (SSL/TLS, SSH, etc.)"
           - ""
           - "RECOMMENDATION:"
           - "  - APPLY IMMEDIATELY if no applications require algif_aead"
