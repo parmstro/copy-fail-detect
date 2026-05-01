@@ -1,0 +1,375 @@
+---
+- name: CVE-2026-31431 (Copy Fail) Vulnerability Assessment
+  hosts: all
+  become: true
+  gather_facts: true
+  vars:
+    apply_remediation: false
+
+  tasks:
+    - name: Check if lsof command exists
+      command: which lsof
+      register: lsof_check
+      changed_when: false
+      failed_when: false
+
+    - name: Check if lsmod command exists
+      command: which lsmod
+      register: lsmod_check
+      changed_when: false
+      failed_when: false
+
+    - name: Install lsof (RedHat/CentOS/Fedora)
+      package:
+        name: lsof
+        state: present
+      when:
+        - lsof_check.rc != 0
+        - ansible_os_family == "RedHat"
+
+    - name: Install lsof (Debian/Ubuntu)
+      package:
+        name: lsof
+        state: present
+      when:
+        - lsof_check.rc != 0
+        - ansible_os_family == "Debian"
+
+    - name: Install kmod for lsmod (RedHat/CentOS/Fedora)
+      package:
+        name: kmod
+        state: present
+      when:
+        - lsmod_check.rc != 0
+        - ansible_os_family == "RedHat"
+
+    - name: Install kmod for lsmod (Debian/Ubuntu)
+      package:
+        name: kmod
+        state: present
+      when:
+        - lsmod_check.rc != 0
+        - ansible_os_family == "Debian"
+
+    - name: Get kernel version
+      command: uname -r
+      register: kernel_version
+      changed_when: false
+
+    - name: Parse kernel version
+      set_fact:
+        kernel_major: "{{ kernel_version.stdout.split('.')[0] | int }}"
+        kernel_minor: "{{ kernel_version.stdout.split('.')[1] | int }}"
+
+    - name: Check if kernel is potentially vulnerable (>= 4.10, from ~2017)
+      set_fact:
+        kernel_in_vuln_range: "{{ (kernel_major | int > 4) or (kernel_major | int == 4 and kernel_minor | int >= 10) }}"
+
+    - name: Check if algif_aead module exists in kernel
+      shell: modinfo algif_aead
+      register: algif_aead_modinfo
+      changed_when: false
+      failed_when: false
+
+    - name: Check if algif_aead is currently loaded
+      shell: lsmod | grep algif_aead
+      register: lsmod_algif_aead
+      changed_when: false
+      failed_when: false
+
+    - name: Check for active AF_ALG sockets
+      shell: lsof | grep AF_ALG
+      register: lsof_af_alg
+      changed_when: false
+      failed_when: false
+
+    - name: Check if algif_aead is blacklisted
+      shell: grep -r algif_aead /etc/modprobe.d/ /usr/lib/modprobe.d/ 2>/dev/null || true
+      register: algif_blacklist_check
+      changed_when: false
+      failed_when: false
+
+    - name: Check kernel config for CONFIG_CRYPTO_USER_API_AEAD
+      shell: |
+        if [ -f /boot/config-{{ kernel_version.stdout }} ]; then
+          grep CONFIG_CRYPTO_USER_API_AEAD /boot/config-{{ kernel_version.stdout }} || echo "NOT_FOUND"
+        else
+          echo "CONFIG_FILE_NOT_FOUND"
+        fi
+      register: crypto_aead_config
+      changed_when: false
+      failed_when: false
+
+    - name: Assess CVE-2026-31431 vulnerability status
+      set_fact:
+        cve_assessment:
+          host: "{{ inventory_hostname }}"
+          cve_id: "CVE-2026-31431"
+          cve_name: "Copy Fail"
+          kernel_version: "{{ kernel_version.stdout }}"
+          kernel_in_vulnerable_range: "{{ kernel_in_vuln_range }}"
+          algif_aead_module_exists: "{{ algif_aead_modinfo.rc == 0 }}"
+          algif_aead_currently_loaded: "{{ lsmod_algif_aead.rc == 0 }}"
+          active_af_alg_sockets: "{{ lsof_af_alg.rc == 0 }}"
+          algif_aead_blacklisted: "{{ 'blacklist algif_aead' in algif_blacklist_check.stdout or 'install algif_aead /bin/true' in algif_blacklist_check.stdout }}"
+          crypto_config: "{{ crypto_aead_config.stdout }}"
+          actively_exploitable: "{{ kernel_in_vuln_range and algif_aead_modinfo.rc == 0 and lsmod_algif_aead.rc == 0 }}"
+          potentially_vulnerable: "{{ kernel_in_vuln_range and algif_aead_modinfo.rc == 0 }}"
+
+    - name: Determine vulnerability status
+      set_fact:
+        vulnerability_status: |
+          {% if cve_assessment.kernel_in_vulnerable_range and cve_assessment.algif_aead_module_exists %}
+          {% if cve_assessment.algif_aead_blacklisted %}
+          MITIGATED - Module is blacklisted
+          {% elif cve_assessment.algif_aead_currently_loaded %}
+          VULNERABLE - Module is loaded and exploitable
+          {% else %}
+          VULNERABLE - Module exists and can be loaded
+          {% endif %}
+          {% elif not cve_assessment.kernel_in_vulnerable_range %}
+          NOT VULNERABLE - Kernel too old (pre-2017)
+          {% else %}
+          NOT VULNERABLE - Module not available
+          {% endif %}
+
+    - name: Display detailed CVE-2026-31431 assessment
+      debug:
+        msg:
+          - "=========================================="
+          - "CVE-2026-31431 (Copy Fail) Assessment"
+          - "=========================================="
+          - "Host: {{ inventory_hostname }}"
+          - "Kernel Version: {{ cve_assessment.kernel_version }}"
+          - "Status: {{ vulnerability_status | trim }}"
+          - ""
+          - "Details:"
+          - "  - Kernel in vulnerable range (>=4.10): {{ cve_assessment.kernel_in_vulnerable_range }}"
+          - "  - algif_aead module exists: {{ cve_assessment.algif_aead_module_exists }}"
+          - "  - algif_aead currently loaded: {{ cve_assessment.algif_aead_currently_loaded }}"
+          - "  - Active AF_ALG sockets: {{ cve_assessment.active_af_alg_sockets }}"
+          - "  - Module blacklisted: {{ cve_assessment.algif_aead_blacklisted }}"
+          - ""
+          - "{% if cve_assessment.actively_exploitable %}IMMEDIATE ACTION REQUIRED: System is actively vulnerable!{% endif %}"
+          - "=========================================="
+
+    - name: Create JSON report
+      set_fact:
+        json_report: "{{ cve_assessment | to_json }}"
+
+    - name: Save assessment to local file
+      copy:
+        content: "{{ json_report }}"
+        dest: "/tmp/cve-2026-31431-{{ inventory_hostname }}.json"
+      delegate_to: localhost
+      become: false
+
+    - name: Flag vulnerable hosts
+      set_fact:
+        vulnerable_host: true
+      when: cve_assessment.potentially_vulnerable and not cve_assessment.algif_aead_blacklisted
+
+    - name: Display remediation information
+      debug:
+        msg:
+          - "=========================================="
+          - "CVE-2026-31431 REMEDIATION INFORMATION"
+          - "=========================================="
+          - ""
+          - "RECOMMENDED REMEDIATION:"
+          - "  Blacklist the algif_aead kernel module"
+          - ""
+          - "DESCRIPTION:"
+          - "  This remediation prevents the vulnerable algif_aead module from being"
+          - "  loaded into the kernel, effectively mitigating CVE-2026-31431."
+          - "  The module will be unloaded if currently active and blacklisted"
+          - "  to prevent future loading."
+          - ""
+          - "ACTIONS PERFORMED:"
+          - "  1. Unload algif_aead module if currently loaded"
+          - "  2. Create blacklist configuration in /etc/modprobe.d/"
+          - "  3. Update initramfs/initrd (if applicable)"
+          - "  4. Verify remediation success"
+          - ""
+          - "IMPLICATIONS:"
+          - "  ✓ POSITIVE: Eliminates local privilege escalation vector"
+          - "  ✓ POSITIVE: No reboot required (effective immediately)"
+          - "  ✓ POSITIVE: Persists across reboots via blacklist config"
+          - ""
+          - "  ⚠ CAUTION: Applications using AF_ALG AEAD crypto may fail"
+          - "  ⚠ CAUTION: Rarely used; typically only affects custom crypto implementations"
+          - "  ⚠ CAUTION: Does not affect standard system crypto operations"
+          - ""
+          - "RECOMMENDATION:"
+          - "  - APPLY IMMEDIATELY if no applications require algif_aead"
+          - "  - TEST in non-production first if uncertain"
+          - "  - PERMANENT FIX: Update to patched kernel when available"
+          - ""
+          - "TO APPLY REMEDIATION:"
+          - "  Run: ansible-playbook check_af_alg.yml -e apply_remediation=true"
+          - ""
+          - "TO TARGET ONLY VULNERABLE HOSTS:"
+          - "  Run: ansible-playbook check_af_alg.yml -e apply_remediation=true --limit vulnerable_hosts"
+          - ""
+          - "=========================================="
+      when:
+        - cve_assessment.potentially_vulnerable
+        - not cve_assessment.algif_aead_blacklisted
+        - not apply_remediation
+
+    - name: "REMEDIATION - Unload algif_aead module if currently loaded"
+      command: rmmod algif_aead
+      register: rmmod_result
+      failed_when: false
+      when:
+        - apply_remediation
+        - cve_assessment.potentially_vulnerable
+        - not cve_assessment.algif_aead_blacklisted
+        - cve_assessment.algif_aead_currently_loaded
+
+    - name: "REMEDIATION - Display unload result"
+      debug:
+        msg: "algif_aead module unloaded: {{ rmmod_result.rc == 0 }}"
+      when:
+        - apply_remediation
+        - cve_assessment.potentially_vulnerable
+        - not cve_assessment.algif_aead_blacklisted
+        - rmmod_result is defined
+
+    - name: "REMEDIATION - Create blacklist configuration for algif_aead"
+      copy:
+        dest: /etc/modprobe.d/blacklist-algif_aead-cve-2026-31431.conf
+        content: |
+          # CVE-2026-31431 (Copy Fail) Mitigation
+          # Blacklist algif_aead module to prevent local privilege escalation
+          # Applied: {{ ansible_date_time.iso8601 }}
+          # Reference: https://www.sysdig.com/blog/cve-2026-31431-copy-fail-linux-kernel-flaw-lets-local-users-gain-root-in-seconds
+
+          blacklist algif_aead
+          install algif_aead /bin/true
+        mode: '0644'
+        owner: root
+        group: root
+      register: blacklist_created
+      when:
+        - apply_remediation
+        - cve_assessment.potentially_vulnerable
+        - not cve_assessment.algif_aead_blacklisted
+
+    - name: "REMEDIATION - Update initramfs (Debian/Ubuntu)"
+      command: update-initramfs -u
+      when:
+        - apply_remediation
+        - cve_assessment.potentially_vulnerable
+        - not cve_assessment.algif_aead_blacklisted
+        - blacklist_created is changed
+        - ansible_os_family == "Debian"
+
+    - name: "REMEDIATION - Update initrd (RedHat/CentOS/Fedora)"
+      command: dracut -f
+      when:
+        - apply_remediation
+        - cve_assessment.potentially_vulnerable
+        - not cve_assessment.algif_aead_blacklisted
+        - blacklist_created is changed
+        - ansible_os_family == "RedHat"
+
+    - name: "REMEDIATION - Verify module cannot be loaded"
+      command: modprobe algif_aead
+      register: modprobe_test
+      failed_when: modprobe_test.rc == 0
+      changed_when: false
+      when:
+        - apply_remediation
+        - cve_assessment.potentially_vulnerable
+        - blacklist_created is changed
+
+    - name: "REMEDIATION - Re-verify algif_aead is not loaded"
+      shell: lsmod | grep algif_aead
+      register: post_remediation_check
+      changed_when: false
+      failed_when: post_remediation_check.rc == 0
+      when:
+        - apply_remediation
+        - cve_assessment.potentially_vulnerable
+        - blacklist_created is changed
+
+    - name: "REMEDIATION - Display success message"
+      debug:
+        msg:
+          - "=========================================="
+          - "REMEDIATION SUCCESSFUL"
+          - "=========================================="
+          - "Host: {{ inventory_hostname }}"
+          - "Action: algif_aead module blacklisted"
+          - "Status: CVE-2026-31431 mitigated"
+          - "Configuration: /etc/modprobe.d/blacklist-algif_aead-cve-2026-31431.conf"
+          - ""
+          - "Next Steps:"
+          - "  ✓ Remediation is active immediately (no reboot required)"
+          - "  ✓ Blacklist persists across reboots"
+          - "  → Monitor vendor security advisories for kernel patches"
+          - "  → Plan kernel update to permanently fix the vulnerability"
+          - "=========================================="
+      when:
+        - apply_remediation
+        - cve_assessment.potentially_vulnerable
+        - blacklist_created is changed
+
+    - name: Set remediation flag
+      set_fact:
+        remediation_applied: true
+      when:
+        - apply_remediation
+        - cve_assessment.potentially_vulnerable
+        - blacklist_created is changed
+
+- name: Create dynamic group for vulnerable hosts
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Add vulnerable hosts to dynamic group
+      group_by:
+        key: "{{ 'vulnerable_hosts' if (vulnerable_host | default(false)) else 'safe_hosts' }}"
+
+- name: Generate summary report
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Collect vulnerable hosts
+      set_fact:
+        all_vulnerable: "{{ groups['all'] | map('extract', hostvars, 'vulnerable_host') | select('defined') | list }}"
+
+    - name: Collect remediated hosts
+      set_fact:
+        all_remediated: "{{ groups['all'] | map('extract', hostvars, 'remediation_applied') | select('defined') | list }}"
+
+    - name: Build vulnerable host list
+      set_fact:
+        vulnerable_hostnames: "{{ groups['all'] | select('in', groups.get('vulnerable_hosts', [])) | list }}"
+
+    - name: Display final summary
+      debug:
+        msg:
+          - "=========================================="
+          - "CVE-2026-31431 Summary Report"
+          - "=========================================="
+          - "Total hosts scanned: {{ groups['all'] | length }}"
+          - "Vulnerable hosts: {{ all_vulnerable | length }}"
+          - "{% if apply_remediation | bool %}Remediated hosts: {{ all_remediated | length }}{% endif %}"
+          - ""
+          - "{% if all_vulnerable | length > 0 %}Vulnerable hosts: {{ vulnerable_hostnames | join(', ') }}{% endif %}"
+          - ""
+          - "Individual reports saved to /tmp/cve-2026-31431-*.json"
+          - ""
+          - "{% if all_vulnerable | length > 0 and not (apply_remediation | bool) %}"
+          - "TO REMEDIATE VULNERABLE HOSTS:"
+          - "  ansible-playbook check_af_alg.yml -e apply_remediation=true --limit vulnerable_hosts"
+          - "{% endif %}"
+          - ""
+          - "{% if all_remediated | length > 0 %}"
+          - "REMEDIATION COMPLETE"
+          - "  {{ all_remediated | length }} host(s) successfully mitigated"
+          - "  Review /etc/modprobe.d/blacklist-algif_aead-cve-2026-31431.conf on remediated hosts"
+          - "{% endif %}"
+          - "=========================================="
