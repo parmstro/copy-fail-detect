@@ -5,6 +5,9 @@
   gather_facts: true
   vars:
     apply_remediation: false
+  environment:
+    ANSIBLE_DEPRECATION_WARNINGS: "False"
+    ANSIBLE_COMMAND_WARNINGS: "False"
 
   tasks:
     - name: Check if lsof command exists
