@@ -1,0 +1,127 @@
+---
+# defaults file for cve_2026_31431
+# CVE-2026-31431 (Copy Fail) Mitigation Role
+
+# =============================================================================
+# Mitigation Control Flags (Bitwise)
+# =============================================================================
+# Use bitwise flags to enable/disable specific mitigation strategies
+#
+# Flag Values:
+#   MITIGATE_MODULE_BLACKLIST = 1  (0b0001) - Blacklist algif_aead kernel module
+#   MITIGATE_SELINUX          = 2  (0b0010) - SELinux policy to block AF_ALG sockets
+#   MITIGATE_SECCOMP          = 4  (0b0100) - systemd seccomp restrictions
+#   MITIGATE_EBPF_LSM         = 8  (0b1000) - eBPF LSM programs (kernel 5.7+)
+#
+# Examples:
+#   mitigation_flags: 1   # Module blacklist only
+#   mitigation_flags: 2   # SELinux only
+#   mitigation_flags: 3   # Module blacklist + SELinux (1 + 2)
+#   mitigation_flags: 7   # All except eBPF LSM (1 + 2 + 4)
+#   mitigation_flags: 15  # All mitigations (1 + 2 + 4 + 8)
+#
+# Default: All mitigations except eBPF LSM (moderate approach)
+mitigation_flags: 7
+
+# Individual flag constants (for reference - don't modify these)
+MITIGATE_MODULE_BLACKLIST: 1
+MITIGATE_SELINUX: 2
+MITIGATE_SECCOMP: 4
+MITIGATE_EBPF_LSM: 8
+
+# =============================================================================
+# Assessment Control
+# =============================================================================
+# Perform vulnerability assessment
+perform_assessment: true
+
+# Apply remediation (if false, only assess)
+apply_remediation: false
+
+# =============================================================================
+# Module Blacklist Configuration
+# =============================================================================
+# Path to modprobe configuration directory
+modprobe_config_dir: /etc/modprobe.d
+
+# Blacklist configuration filename
+blacklist_config_file: blacklist-algif_aead-cve-2026-31431.conf
+
+# =============================================================================
+# SELinux Configuration
+# =============================================================================
+# SELinux policy module name
+selinux_policy_module: cve_2026_31431_af_alg_deny
+
+# SELinux policy version
+selinux_policy_version: "1.0"
+
+# Directory for SELinux policy build files
+selinux_policy_build_dir: /var/lib/cve-2026-31431-selinux
+
+# Domains to deny AF_ALG access (can be customized)
+selinux_denied_domains:
+  - user_t
+  - unconfined_t
+  - httpd_t
+  - postgresql_t
+  - mysqld_t
+
+# =============================================================================
+# systemd seccomp Configuration
+# =============================================================================
+# Services to harden with seccomp restrictions
+# Add service names without .service extension
+seccomp_protected_services:
+  - httpd
+  - nginx
+  - postgresql
+  - mariadb
+  - redis
+  - memcached
+
+# Directory for systemd drop-in files
+systemd_dropin_dir: /etc/systemd/system
+
+# seccomp drop-in filename
+seccomp_dropin_file: 90-cve-2026-31431-block-af-alg.conf
+
+# =============================================================================
+# eBPF LSM Configuration
+# =============================================================================
+# eBPF program source directory
+ebpf_src_dir: /usr/local/src/cve-2026-31431-ebpf
+
+# eBPF program installation directory
+ebpf_install_dir: /usr/local/lib/bpf
+
+# BPF filesystem mount point
+bpf_fs: /sys/fs/bpf
+
+# eBPF program name
+ebpf_program_name: block_af_alg_lsm
+
+# Required kernel version for eBPF LSM (major.minor)
+ebpf_required_kernel: "5.7"
+
+# =============================================================================
+# Reporting Configuration
+# =============================================================================
+# Directory for JSON reports
+report_dir: /tmp
+
+# Report filename pattern
+report_filename: "cve-2026-31431-{{ inventory_hostname }}.json"
+
+# =============================================================================
+# Detection Thresholds
+# =============================================================================
+# Minimum kernel version for vulnerability (major.minor)
+vulnerable_kernel_min_major: 4
+vulnerable_kernel_min_minor: 10
+
+# =============================================================================
+# Rollback/Cleanup Options
+# =============================================================================
+# Remove remediation configurations (use with caution)
+remove_remediations: false

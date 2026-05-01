@@ -1,0 +1,41 @@
+---
+galaxy_info:
+  role_name: cve_2026_31431
+  author: Paul Armstrong (with Claude Sonnet 4.5)
+  description: Multi-layer mitigation for CVE-2026-31431 (Copy Fail) Linux kernel vulnerability
+  company: N/A
+
+  license: MIT
+
+  min_ansible_version: "2.9"
+
+  platforms:
+    - name: EL
+      versions:
+        - "8"
+        - "9"
+    - name: Fedora
+      versions:
+        - "38"
+        - "39"
+        - "40"
+    - name: Ubuntu
+      versions:
+        - focal
+        - jammy
+    - name: Debian
+      versions:
+        - bullseye
+        - bookworm
+
+  galaxy_tags:
+    - security
+    - cve
+    - kernel
+    - mitigation
+    - selinux
+    - seccomp
+    - ebpf
+    - hardening
+
+dependencies: []

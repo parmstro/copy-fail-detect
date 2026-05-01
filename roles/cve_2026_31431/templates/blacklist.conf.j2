@@ -1,0 +1,11 @@
+# CVE-2026-31431 (Copy Fail) Mitigation
+# Blacklist algif_aead module to prevent local privilege escalation
+# Applied: {{ ansible_date_time.iso8601 }}
+# Host: {{ inventory_hostname }}
+# Reference: https://www.sysdig.com/blog/cve-2026-31431-copy-fail-linux-kernel-flaw-lets-local-users-gain-root-in-seconds
+
+# Prevent automatic loading of algif_aead module
+blacklist algif_aead
+
+# Intercept modprobe attempts and return success without loading
+install algif_aead /bin/true

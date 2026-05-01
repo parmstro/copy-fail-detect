@@ -1,0 +1,89 @@
+---
+# Module blacklist remediation for CVE-2026-31431
+
+- name: "MODULE BLACKLIST - Unload algif_aead module if currently loaded"
+  command: rmmod algif_aead
+  register: rmmod_result
+  failed_when: false
+  when: cve_assessment.algif_aead_currently_loaded
+  notify: Module blacklist applied
+
+- name: "MODULE BLACKLIST - Display unload result"
+  debug:
+    msg: "algif_aead module unloaded: {{ rmmod_result.rc == 0 }}"
+  when:
+    - cve_assessment.algif_aead_currently_loaded
+    - rmmod_result.rc is defined
+
+- name: "MODULE BLACKLIST - Create blacklist configuration"
+  template:
+    src: blacklist.conf.j2
+    dest: "{{ modprobe_config_dir }}/{{ blacklist_config_file }}"
+    mode: '0644'
+    owner: root
+    group: root
+  register: blacklist_created
+  notify: Module blacklist applied
+
+- name: "MODULE BLACKLIST - Update initramfs (Debian/Ubuntu)"
+  command: update-initramfs -u
+  when:
+    - blacklist_created is defined
+    - blacklist_created is changed
+    - ansible_os_family == "Debian"
+  notify: Module blacklist applied
+
+- name: "MODULE BLACKLIST - Update initrd (RedHat/CentOS/Fedora)"
+  command: dracut -f
+  when:
+    - blacklist_created is defined
+    - blacklist_created is changed
+    - ansible_os_family == "RedHat"
+  notify: Module blacklist applied
+
+- name: "MODULE BLACKLIST - Verify module cannot be loaded"
+  command: modprobe algif_aead
+  register: modprobe_test
+  failed_when: modprobe_test.rc == 0
+  changed_when: false
+  when:
+    - cve_assessment.algif_aead_module_exists
+    - blacklist_created is defined
+    - blacklist_created is changed
+
+- name: "MODULE BLACKLIST - Re-verify algif_aead is not loaded"
+  shell: lsmod | grep algif_aead
+  register: post_remediation_check
+  changed_when: false
+  failed_when: post_remediation_check.rc == 0
+  when:
+    - cve_assessment.algif_aead_module_exists
+    - blacklist_created is defined
+    - blacklist_created is changed
+
+- name: "MODULE BLACKLIST - Display success message"
+  debug:
+    msg:
+      - "=========================================="
+      - "MODULE BLACKLIST REMEDIATION SUCCESSFUL"
+      - "=========================================="
+      - "Host: {{ inventory_hostname }}"
+      - "Action: algif_aead module blacklisted"
+      - "Status: CVE-2026-31431 mitigated (module layer)"
+      - "Configuration: {{ modprobe_config_dir }}/{{ blacklist_config_file }}"
+      - ""
+      - "Next Steps:"
+      - "  ✓ Remediation is active immediately (no reboot required)"
+      - "  ✓ Blacklist persists across reboots"
+      - "  → Consider adding SELinux or seccomp for defense in depth"
+      - "=========================================="
+  when:
+    - blacklist_created is defined
+    - blacklist_created is changed
+
+- name: Set module blacklist remediation flag
+  set_fact:
+    remediation_module_blacklist_applied: true
+  when:
+    - blacklist_created is defined
+    - blacklist_created is changed

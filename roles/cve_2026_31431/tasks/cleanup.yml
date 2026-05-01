@@ -1,0 +1,107 @@
+---
+# Cleanup/removal tasks for CVE-2026-31431 remediations
+# WARNING: This removes all protection - use with caution
+
+- name: "CLEANUP - Confirm cleanup operation"
+  debug:
+    msg:
+      - "=========================================="
+      - "WARNING: REMOVING CVE-2026-31431 PROTECTIONS"
+      - "=========================================="
+      - "This will remove all mitigation configurations"
+      - "The system will become vulnerable again"
+      - "=========================================="
+
+- name: "CLEANUP - Remove module blacklist configuration"
+  file:
+    path: "{{ modprobe_config_dir }}/{{ blacklist_config_file }}"
+    state: absent
+  when: (mitigation_flags | int) & MITIGATE_MODULE_BLACKLIST
+
+- name: "CLEANUP - Update initramfs after blacklist removal (Debian)"
+  command: update-initramfs -u
+  when:
+    - (mitigation_flags | int) & MITIGATE_MODULE_BLACKLIST
+    - ansible_os_family == "Debian"
+
+- name: "CLEANUP - Update initrd after blacklist removal (RedHat)"
+  command: dracut -f
+  when:
+    - (mitigation_flags | int) & MITIGATE_MODULE_BLACKLIST
+    - ansible_os_family == "RedHat"
+
+- name: "CLEANUP - Remove SELinux policy module"
+  command: semodule -r {{ selinux_policy_module }}
+  when:
+    - (mitigation_flags | int) & MITIGATE_SELINUX
+    - ansible_selinux.status is defined
+    - ansible_selinux.status == "enabled"
+  failed_when: false
+
+- name: "CLEANUP - Remove SELinux policy build directory"
+  file:
+    path: "{{ selinux_policy_build_dir }}"
+    state: absent
+  when: (mitigation_flags | int) & MITIGATE_SELINUX
+
+- name: "CLEANUP - Remove systemd seccomp drop-in files"
+  file:
+    path: "{{ systemd_dropin_dir }}/{{ item }}.service.d/{{ seccomp_dropin_file }}"
+    state: absent
+  loop: "{{ seccomp_protected_services }}"
+  when: (mitigation_flags | int) & MITIGATE_SECCOMP
+  notify: Reload systemd
+
+- name: "CLEANUP - Reload systemd after drop-in removal"
+  systemd:
+    daemon_reload: true
+  when: (mitigation_flags | int) & MITIGATE_SECCOMP
+
+- name: "CLEANUP - Stop and disable eBPF LSM service"
+  systemd:
+    name: cve-2026-31431-ebpf-lsm.service
+    state: stopped
+    enabled: false
+  when: (mitigation_flags | int) & MITIGATE_EBPF_LSM
+  failed_when: false
+
+- name: "CLEANUP - Remove eBPF LSM service file"
+  file:
+    path: /etc/systemd/system/cve-2026-31431-ebpf-lsm.service
+    state: absent
+  when: (mitigation_flags | int) & MITIGATE_EBPF_LSM
+
+- name: "CLEANUP - Unload BPF program"
+  shell: |
+    if [ -e {{ bpf_fs }}/{{ ebpf_program_name }} ]; then
+      rm {{ bpf_fs }}/{{ ebpf_program_name }}
+    fi
+  when: (mitigation_flags | int) & MITIGATE_EBPF_LSM
+  failed_when: false
+
+- name: "CLEANUP - Remove eBPF installation directory"
+  file:
+    path: "{{ ebpf_install_dir }}"
+    state: absent
+  when: (mitigation_flags | int) & MITIGATE_EBPF_LSM
+
+- name: "CLEANUP - Remove eBPF source directory"
+  file:
+    path: "{{ ebpf_src_dir }}"
+    state: absent
+  when: (mitigation_flags | int) & MITIGATE_EBPF_LSM
+
+- name: "CLEANUP - Display cleanup summary"
+  debug:
+    msg:
+      - "=========================================="
+      - "CLEANUP COMPLETED"
+      - "=========================================="
+      - "Removed configurations:"
+      - "{% if (mitigation_flags | int) & MITIGATE_MODULE_BLACKLIST %}  - Module blacklist{% endif %}"
+      - "{% if (mitigation_flags | int) & MITIGATE_SELINUX %}  - SELinux policy{% endif %}"
+      - "{% if (mitigation_flags | int) & MITIGATE_SECCOMP %}  - systemd seccomp restrictions{% endif %}"
+      - "{% if (mitigation_flags | int) & MITIGATE_EBPF_LSM %}  - eBPF LSM program{% endif %}"
+      - ""
+      - "WARNING: System is now vulnerable to CVE-2026-31431"
+      - "=========================================="

@@ -1,0 +1,14 @@
+# CVE-2026-31431 (Copy Fail) Mitigation
+# systemd seccomp filter to block AF_ALG socket creation
+# Applied: {{ ansible_date_time.iso8601 }}
+# Host: {{ inventory_hostname }}
+
+[Service]
+# Block AF_ALG socket family to prevent CVE-2026-31431 exploitation
+RestrictAddressFamilies=~AF_ALG
+
+# Additional hardening (optional - uncomment if desired)
+# SystemCallFilter=~@privileged
+# PrivateTmp=true
+# ProtectSystem=strict
+# ProtectHome=true

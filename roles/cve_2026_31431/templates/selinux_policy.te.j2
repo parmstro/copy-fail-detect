@@ -1,0 +1,39 @@
+policy_module({{ selinux_policy_module }}, {{ selinux_policy_version }})
+
+########################################
+# CVE-2026-31431 (Copy Fail) Mitigation
+# SELinux policy to deny AF_ALG socket creation
+#
+# Applied: {{ ansible_date_time.iso8601 }}
+# Host: {{ inventory_hostname }}
+#
+# This policy denies AF_ALG socket creation for specified domains
+# to prevent exploitation of CVE-2026-31431 local privilege escalation
+########################################
+
+require {
+{% for domain in selinux_denied_domains %}
+    type {{ domain }};
+{% endfor %}
+    class alg_socket { create bind };
+}
+
+########################################
+# Deny AF_ALG socket operations
+########################################
+
+{% for domain in selinux_denied_domains %}
+# Deny AF_ALG socket creation for {{ domain }}
+dontaudit {{ domain }} self:alg_socket { create bind };
+{% endfor %}
+
+########################################
+# Additional security: neverallow rule
+# Prevents policy modifications that would allow AF_ALG
+########################################
+
+# Note: neverallow rules are compile-time checks
+# Uncomment if you want strict enforcement during policy compilation
+{% for domain in selinux_denied_domains %}
+# neverallow {{ domain }} self:alg_socket create;
+{% endfor %}

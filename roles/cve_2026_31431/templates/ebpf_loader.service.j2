@@ -1,0 +1,21 @@
+[Unit]
+Description=CVE-2026-31431 eBPF LSM Protection
+Documentation=https://github.com/parmstro/copy-fail-detect
+After=network.target
+Before=multi-user.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/bpftool prog load {{ ebpf_install_dir }}/{{ ebpf_program_name }}.bpf.o {{ bpf_fs }}/{{ ebpf_program_name }} type lsm
+ExecStop=/bin/rm -f {{ bpf_fs }}/{{ ebpf_program_name }}
+
+# Security hardening
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths={{ bpf_fs }}
+PrivateTmp=true
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

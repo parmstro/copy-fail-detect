@@ -1,0 +1,81 @@
+---
+# Example playbook for CVE-2026-31431 (Copy Fail) mitigation
+# This playbook uses the cve_2026_31431 role with bitwise flags for mitigation control
+
+- name: CVE-2026-31431 Assessment and Mitigation
+  hosts: all
+  become: true
+  gather_facts: true
+
+  # Override role defaults here
+  vars:
+    # Assessment mode (default: false = assessment only)
+    apply_remediation: false
+
+    # Mitigation flags (bitwise):
+    #   1 = Module Blacklist
+    #   2 = SELinux Policy
+    #   4 = systemd seccomp
+    #   8 = eBPF LSM (kernel 5.7+)
+    #
+    # Examples:
+    #   mitigation_flags: 1   # Module blacklist only
+    #   mitigation_flags: 3   # Module blacklist + SELinux (recommended minimum)
+    #   mitigation_flags: 7   # All except eBPF (recommended for most systems)
+    #   mitigation_flags: 15  # All mitigations (for systems with modern kernels)
+    #
+    mitigation_flags: 7  # Module blacklist + SELinux + seccomp (default)
+
+  roles:
+    - role: cve_2026_31431
+
+- name: Create dynamic group for vulnerable hosts
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Add vulnerable hosts to dynamic group
+      group_by:
+        key: "{{ 'vulnerable_hosts' if (vulnerable_host | default(false)) else 'safe_hosts' }}"
+
+- name: Generate summary report
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Collect vulnerable hosts
+      set_fact:
+        all_vulnerable: "{{ groups['all'] | map('extract', hostvars, 'vulnerable_host') | select('defined') | list }}"
+
+    - name: Build vulnerable host list
+      set_fact:
+        vulnerable_hostnames: "{{ groups['all'] | select('in', groups.get('vulnerable_hosts', [])) | list }}"
+
+    - name: Collect remediation statistics
+      set_fact:
+        remediation_stats:
+          module_blacklist: "{{ groups['all'] | map('extract', hostvars, 'remediation_module_blacklist_applied') | select('defined') | list | length }}"
+          selinux: "{{ groups['all'] | map('extract', hostvars, 'remediation_selinux_applied') | select('defined') | list | length }}"
+          seccomp: "{{ groups['all'] | map('extract', hostvars, 'remediation_seccomp_applied') | select('defined') | list | length }}"
+          ebpf: "{{ groups['all'] | map('extract', hostvars, 'remediation_ebpf_applied') | select('defined') | list | length }}"
+
+    - name: Display final summary
+      debug:
+        msg:
+          - "=========================================="
+          - "CVE-2026-31431 Summary Report"
+          - "=========================================="
+          - "Total hosts scanned: {{ groups['all'] | length }}"
+          - "Vulnerable hosts: {{ all_vulnerable | length }}"
+          - ""
+          - "{% if all_vulnerable | length > 0 %}Vulnerable hosts: {{ vulnerable_hostnames | join(', ') }}{% endif %}"
+          - ""
+          - "{% if apply_remediation %}Mitigations Applied:{% endif %}"
+          - "{% if apply_remediation %}  - Module Blacklist: {{ remediation_stats.module_blacklist }} hosts{% endif %}"
+          - "{% if apply_remediation %}  - SELinux Policy: {{ remediation_stats.selinux }} hosts{% endif %}"
+          - "{% if apply_remediation %}  - systemd seccomp: {{ remediation_stats.seccomp }} hosts{% endif %}"
+          - "{% if apply_remediation %}  - eBPF LSM: {{ remediation_stats.ebpf }} hosts{% endif %}"
+          - ""
+          - "Individual reports saved to /tmp/cve-2026-31431-*.json"
+          - ""
+          - "{% if all_vulnerable | length > 0 and not apply_remediation %}TO REMEDIATE VULNERABLE HOSTS:{% endif %}"
+          - "{% if all_vulnerable | length > 0 and not apply_remediation %}  ansible-playbook cve_2026_31431_playbook.yml -e apply_remediation=true -e mitigation_flags=7 --limit vulnerable_hosts{% endif %}"
+          - "=========================================="

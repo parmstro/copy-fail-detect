@@ -1,0 +1,86 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * CVE-2026-31431 (Copy Fail) Mitigation
+ * eBPF LSM program to block AF_ALG socket creation
+ *
+ * Applied: {{ ansible_date_time.iso8601 }}
+ * Host: {{ inventory_hostname }}
+ *
+ * This BPF program hooks into the LSM socket_create hook and denies
+ * creation of AF_ALG sockets to prevent CVE-2026-31431 exploitation
+ */
+
+#include <linux/bpf.h>
+#include <linux/socket.h>
+#include <bpf/bpf_helpers.h>
+#include <bpf/bpf_tracing.h>
+#include <errno.h>
+
+#define AF_ALG 38
+
+char LICENSE[] SEC("license") = "GPL";
+
+/*
+ * Hook the socket_create LSM hook
+ * This is called before a socket is created
+ */
+SEC("lsm/socket_create")
+int BPF_PROG(block_af_alg, int family, int type, int protocol, int kern)
+{
+    /* Allow kernel sockets */
+    if (kern)
+        return 0;
+
+    /* Block AF_ALG for user processes */
+    if (family == AF_ALG) {
+        bpf_printk("CVE-2026-31431: Blocked AF_ALG socket creation attempt - PID:%d",
+                   bpf_get_current_pid_tgid() >> 32);
+        return -EPERM;
+    }
+
+    /* Allow all other socket types */
+    return 0;
+}
+
+/*
+ * Optional: Ringbuffer for event logging
+ * This allows userspace to read blocked attempts
+ */
+struct {
+    __uint(type, BPF_MAP_TYPE_RINGBUF);
+    __uint(max_entries, 256 * 1024);
+} events SEC(".maps");
+
+struct event {
+    __u32 pid;
+    __u32 uid;
+    char comm[16];
+};
+
+SEC("lsm/socket_create")
+int BPF_PROG(block_af_alg_log, int family, int type, int protocol, int kern)
+{
+    if (kern)
+        return 0;
+
+    if (family == AF_ALG) {
+        struct event *e;
+
+        /* Reserve space in ringbuffer */
+        e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
+        if (e) {
+            /* Record blocked attempt */
+            e->pid = bpf_get_current_pid_tgid() >> 32;
+            e->uid = bpf_get_current_uid_gid() & 0xffffffff;
+            bpf_get_current_comm(&e->comm, sizeof(e->comm));
+
+            /* Submit event */
+            bpf_ringbuf_submit(e, 0);
+        }
+
+        /* Block the socket creation */
+        return -EPERM;
+    }
+
+    return 0;
+}

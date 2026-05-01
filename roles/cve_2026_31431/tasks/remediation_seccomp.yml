@@ -1,0 +1,119 @@
+---
+# systemd seccomp remediation for CVE-2026-31431
+
+- name: "SECCOMP - Detect running systemd services"
+  shell: systemctl list-units --type=service --state=running --no-pager --no-legend | awk '{print $1}' | sed 's/.service$//'
+  register: running_services
+  changed_when: false
+
+- name: "SECCOMP - Filter services to protect"
+  set_fact:
+    services_to_protect: "{{ seccomp_protected_services | intersect(running_services.stdout_lines) }}"
+
+- name: "SECCOMP - Display services to be protected"
+  debug:
+    msg:
+      - "systemd services to protect: {{ services_to_protect | length }}"
+      - "{{ services_to_protect | join(', ') if services_to_protect | length > 0 else 'None found' }}"
+
+- name: "SECCOMP - Create drop-in directory for each service"
+  file:
+    path: "{{ systemd_dropin_dir }}/{{ item }}.service.d"
+    state: directory
+    mode: '0755'
+    owner: root
+    group: root
+  loop: "{{ services_to_protect }}"
+  when: services_to_protect | length > 0
+
+- name: "SECCOMP - Create seccomp drop-in configuration"
+  template:
+    src: seccomp_dropin.conf.j2
+    dest: "{{ systemd_dropin_dir }}/{{ item }}.service.d/{{ seccomp_dropin_file }}"
+    mode: '0644'
+    owner: root
+    group: root
+  loop: "{{ services_to_protect }}"
+  when: services_to_protect | length > 0
+  register: seccomp_dropins_created
+  notify:
+    - Reload systemd
+    - Restart protected services
+
+- name: "SECCOMP - Reload systemd daemon"
+  systemd:
+    daemon_reload: true
+  when: seccomp_dropins_created is changed
+
+- name: "SECCOMP - Verify seccomp restrictions"
+  shell: systemctl show {{ item }}.service | grep "RestrictAddressFamilies"
+  loop: "{{ services_to_protect }}"
+  register: seccomp_verification
+  changed_when: false
+  failed_when: "'AF_ALG' not in item.stdout"
+  when:
+    - services_to_protect | length > 0
+    - seccomp_dropins_created is changed
+
+- name: "SECCOMP - Restart services to apply seccomp filters"
+  systemd:
+    name: "{{ item }}.service"
+    state: restarted
+  loop: "{{ services_to_protect }}"
+  when:
+    - services_to_protect | length > 0
+    - seccomp_dropins_created is changed
+  register: services_restarted
+
+- name: "SECCOMP - Test service status after restart"
+  systemd:
+    name: "{{ item }}.service"
+  loop: "{{ services_to_protect }}"
+  register: service_status
+  failed_when: service_status.status.ActiveState != "active"
+  when:
+    - services_to_protect | length > 0
+    - services_restarted is changed
+
+- name: "SECCOMP - Display success message"
+  debug:
+    msg:
+      - "=========================================="
+      - "SECCOMP REMEDIATION SUCCESSFUL"
+      - "=========================================="
+      - "Host: {{ inventory_hostname }}"
+      - "Action: systemd seccomp restrictions applied"
+      - "Protected services: {{ services_to_protect | length }}"
+      - "{% for service in services_to_protect %}"
+      - "  - {{ service }}"
+      - "{% endfor %}"
+      - ""
+      - "Protection Scope:"
+      - "  ✓ Blocks AF_ALG socket creation via seccomp-bpf"
+      - "  ✓ Per-service isolation"
+      - "  ✓ Minimal performance overhead"
+      - "  ✓ Persists across service restarts and reboots"
+      - ""
+      - "Configuration:"
+      - "  Drop-in files: {{ systemd_dropin_dir }}/<service>.service.d/{{ seccomp_dropin_file }}"
+      - ""
+      - "Verification:"
+      - "  systemctl show <service> | grep RestrictAddressFamilies"
+      - "=========================================="
+  when:
+    - services_to_protect | length > 0
+    - seccomp_dropins_created is changed
+
+- name: "SECCOMP - Warn if no services found"
+  debug:
+    msg:
+      - "WARNING: No services from the protection list are currently running"
+      - "Protected services list: {{ seccomp_protected_services | join(', ') }}"
+      - "Running services: {{ running_services.stdout_lines | length }}"
+  when: services_to_protect | length == 0
+
+- name: Set seccomp remediation flag
+  set_fact:
+    remediation_seccomp_applied: true
+    remediation_seccomp_service_count: "{{ services_to_protect | length }}"
+  when: services_to_protect | length > 0

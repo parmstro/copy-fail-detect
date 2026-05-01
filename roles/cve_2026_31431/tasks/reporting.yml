@@ -1,0 +1,90 @@
+---
+# Reporting tasks for CVE-2026-31431
+
+- name: Create enhanced JSON report
+  set_fact:
+    json_report_enhanced:
+      assessment: "{{ cve_assessment }}"
+      mitigations_applied:
+        module_blacklist: "{{ remediation_module_blacklist_applied | default(false) }}"
+        selinux: "{{ remediation_selinux_applied | default(false) }}"
+        seccomp: "{{ remediation_seccomp_applied | default(false) }}"
+        seccomp_service_count: "{{ remediation_seccomp_service_count | default(0) }}"
+        ebpf_lsm: "{{ remediation_ebpf_applied | default(false) }}"
+      mitigation_flags: "{{ mitigation_flags }}"
+      timestamp: "{{ ansible_date_time.iso8601 }}"
+
+- name: Save assessment to local file
+  copy:
+    content: "{{ json_report_enhanced | to_nice_json }}"
+    dest: "{{ report_dir }}/{{ report_filename }}"
+  delegate_to: localhost
+  become: false
+
+- name: Display remediation information
+  debug:
+    msg:
+      - "=========================================="
+      - "CVE-2026-31431 REMEDIATION INFORMATION"
+      - "=========================================="
+      - ""
+      - "AVAILABLE MITIGATIONS:"
+      - ""
+      - "1. MODULE BLACKLIST (Flag: {{ MITIGATE_MODULE_BLACKLIST }})"
+      - "   - Blacklist algif_aead kernel module"
+      - "   - Prevents modprobe loading"
+      - "   - Status: {{ 'ENABLED' if (mitigation_flags | int) & MITIGATE_MODULE_BLACKLIST else 'disabled' }}"
+      - ""
+      - "2. SELINUX POLICY (Flag: {{ MITIGATE_SELINUX }})"
+      - "   - Block AF_ALG socket creation at LSM layer"
+      - "   - Works even if module is loaded"
+      - "   - Status: {{ 'ENABLED' if (mitigation_flags | int) & MITIGATE_SELINUX else 'disabled' }}"
+      - "   - Available: {{ 'Yes' if ansible_selinux.status is defined and ansible_selinux.status == 'enabled' else 'No (SELinux not enabled)' }}"
+      - ""
+      - "3. SYSTEMD SECCOMP (Flag: {{ MITIGATE_SECCOMP }})"
+      - "   - Per-service syscall filtering"
+      - "   - RestrictAddressFamilies=~AF_ALG"
+      - "   - Status: {{ 'ENABLED' if (mitigation_flags | int) & MITIGATE_SECCOMP else 'disabled' }}"
+      - "   - Available: {{ 'Yes' if ansible_service_mgr == 'systemd' else 'No (systemd not used)' }}"
+      - ""
+      - "4. EBPF LSM (Flag: {{ MITIGATE_EBPF_LSM }})"
+      - "   - Dynamic kernel-level socket blocking"
+      - "   - Requires kernel 5.7+ with CONFIG_BPF_LSM"
+      - "   - Status: {{ 'ENABLED' if (mitigation_flags | int) & MITIGATE_EBPF_LSM else 'disabled' }}"
+      - "   - Available: {{ 'Yes' if ebpf_lsm_available | default(false) else 'No (kernel too old or LSM not configured)' }}"
+      - ""
+      - "DEFENSE-IN-DEPTH STRATEGY:"
+      - "  Use multiple layers for maximum protection"
+      - "  Recommended: Module Blacklist (1) + SELinux (2) + seccomp (4) = Flag 7"
+      - ""
+      - "TO APPLY REMEDIATION:"
+      - "  ansible-playbook -e apply_remediation=true -e mitigation_flags=7 <playbook>"
+      - ""
+      - "TO TARGET ONLY VULNERABLE HOSTS:"
+      - "  ansible-playbook -e apply_remediation=true --limit vulnerable_hosts <playbook>"
+      - ""
+      - "=========================================="
+  when:
+    - cve_assessment.potentially_vulnerable | default(false)
+    - not apply_remediation
+
+- name: Create summary for role execution
+  set_fact:
+    role_summary:
+      host: "{{ inventory_hostname }}"
+      vulnerability_status: "{{ vulnerability_status | trim }}"
+      mitigations_requested: "{{ mitigation_flags }}"
+      mitigations_applied:
+        - "{% if remediation_module_blacklist_applied | default(false) %}Module Blacklist{% endif %}"
+        - "{% if remediation_selinux_applied | default(false) %}SELinux Policy{% endif %}"
+        - "{% if remediation_seccomp_applied | default(false) %}systemd seccomp ({{ remediation_seccomp_service_count | default(0) }} services){% endif %}"
+        - "{% if remediation_ebpf_applied | default(false) %}eBPF LSM{% endif %}"
+      is_vulnerable: "{{ cve_assessment.potentially_vulnerable | default(false) }}"
+      is_protected: "{{
+        remediation_module_blacklist_applied | default(false) or
+        remediation_selinux_applied | default(false) or
+        remediation_seccomp_applied | default(false) or
+        remediation_ebpf_applied | default(false) or
+        cve_assessment.algif_aead_blacklisted | default(false) or
+        cve_assessment.selinux_policy_installed | default(false)
+      }}"

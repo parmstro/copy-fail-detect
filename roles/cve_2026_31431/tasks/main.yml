@@ -1,0 +1,111 @@
+---
+# tasks file for cve_2026_31431
+# Main entry point for CVE-2026-31431 mitigation role
+
+- name: Display role execution information
+  debug:
+    msg:
+      - "=========================================="
+      - "CVE-2026-31431 (Copy Fail) Mitigation Role"
+      - "=========================================="
+      - "Mode: {{ 'Remediation' if apply_remediation else 'Assessment Only' }}"
+      - "Mitigation Flags: {{ mitigation_flags }} (0b{{ '%04d' | format(mitigation_flags | int | bin | regex_replace('^0b', '') | int) }})"
+      - "  - Module Blacklist: {{ 'ENABLED' if (mitigation_flags | int) & MITIGATE_MODULE_BLACKLIST else 'disabled' }}"
+      - "  - SELinux Policy:   {{ 'ENABLED' if (mitigation_flags | int) & MITIGATE_SELINUX else 'disabled' }}"
+      - "  - systemd seccomp:  {{ 'ENABLED' if (mitigation_flags | int) & MITIGATE_SECCOMP else 'disabled' }}"
+      - "  - eBPF LSM:         {{ 'ENABLED' if (mitigation_flags | int) & MITIGATE_EBPF_LSM else 'disabled' }}"
+      - "=========================================="
+
+# =============================================================================
+# Pre-flight Checks
+# =============================================================================
+- name: Include pre-flight checks
+  include_tasks: preflight.yml
+  tags:
+    - always
+    - preflight
+
+# =============================================================================
+# Vulnerability Assessment
+# =============================================================================
+- name: Perform vulnerability assessment
+  include_tasks: assessment.yml
+  when: perform_assessment
+  tags:
+    - always
+    - assessment
+
+# =============================================================================
+# Remediation - Module Blacklist
+# =============================================================================
+- name: Apply module blacklist remediation
+  include_tasks: remediation_module_blacklist.yml
+  when:
+    - apply_remediation
+    - (mitigation_flags | int) & MITIGATE_MODULE_BLACKLIST
+    - cve_assessment.potentially_vulnerable | default(false)
+    - not (cve_assessment.algif_aead_blacklisted | default(false))
+  tags:
+    - remediation
+    - module-blacklist
+
+# =============================================================================
+# Remediation - SELinux Policy
+# =============================================================================
+- name: Apply SELinux policy remediation
+  include_tasks: remediation_selinux.yml
+  when:
+    - apply_remediation
+    - (mitigation_flags | int) & MITIGATE_SELINUX
+    - cve_assessment.potentially_vulnerable | default(false)
+    - ansible_selinux.status is defined
+    - ansible_selinux.status == "enabled"
+  tags:
+    - remediation
+    - selinux
+
+# =============================================================================
+# Remediation - systemd seccomp
+# =============================================================================
+- name: Apply systemd seccomp remediation
+  include_tasks: remediation_seccomp.yml
+  when:
+    - apply_remediation
+    - (mitigation_flags | int) & MITIGATE_SECCOMP
+    - ansible_service_mgr == "systemd"
+  tags:
+    - remediation
+    - seccomp
+
+# =============================================================================
+# Remediation - eBPF LSM
+# =============================================================================
+- name: Apply eBPF LSM remediation
+  include_tasks: remediation_ebpf.yml
+  when:
+    - apply_remediation
+    - (mitigation_flags | int) & MITIGATE_EBPF_LSM
+    - cve_assessment.potentially_vulnerable | default(false)
+    - ebpf_lsm_available | default(false)
+  tags:
+    - remediation
+    - ebpf
+
+# =============================================================================
+# Reporting
+# =============================================================================
+- name: Generate reports
+  include_tasks: reporting.yml
+  tags:
+    - always
+    - reporting
+
+# =============================================================================
+# Cleanup (Optional)
+# =============================================================================
+- name: Remove remediation configurations
+  include_tasks: cleanup.yml
+  when: remove_remediations
+  tags:
+    - never
+    - cleanup

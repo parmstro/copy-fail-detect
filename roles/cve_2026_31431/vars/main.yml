@@ -1,0 +1,7 @@
+---
+# vars file for cve_2026_31431
+# These are role-internal variables that should not be overridden
+
+# Internal state tracking
+_assessment_completed: false
+_remediations_completed: false
