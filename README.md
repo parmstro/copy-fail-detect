@@ -1,6 +1,14 @@
-# CVE-2026-31431 (Copy Fail) Detection and Remediation Playbook
+# cfDr - Copy Fail Doctor
 
-This Ansible playbook detects and remediates CVE-2026-31431, a critical local privilege escalation vulnerability in the Linux kernel's algif_aead module.
+**C**opy **F**ail **D**etection and **R**emediation
+
+An Ansible role and playbook suite for detecting and remediating CVE-2026-31431 (Copy Fail), a critical local privilege escalation vulnerability in the Linux kernel's algif_aead module.
+
+## Repository
+
+🔗 **GitHub**: https://github.com/parmstro/cfDr
+
+The name **cfDr** is a play on "Copy Fail Doctor" - your trusted remedy for CVE-2026-31431.
 
 ## Overview
 

@@ -407,4 +407,4 @@ ansible all -m shell -a "journalctl -xe | grep semodule"
 
 - **Role Documentation**: `roles/cve_2026_31431/README.md`
 - **Mitigation Guides**: See `*-mitigation.md` files in repository root
-- **Issues**: https://github.com/parmstro/copy-fail-detect/issues
+- **Issues**: https://github.com/parmstro/cfDr/issues
