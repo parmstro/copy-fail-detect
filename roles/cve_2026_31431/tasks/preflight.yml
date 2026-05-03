@@ -2,19 +2,19 @@
 # Pre-flight checks for CVE-2026-31431 role
 
 - name: Check if lsof command exists
-  command: which lsof
+  ansible.builtin.command: which lsof
   register: lsof_check
   changed_when: false
   failed_when: false
 
 - name: Check if lsmod command exists
-  command: which lsmod
+  ansible.builtin.command: which lsmod
   register: lsmod_check
   changed_when: false
   failed_when: false
 
 - name: Install lsof (RedHat family)
-  package:
+  ansible.builtin.package:
     name: lsof
     state: present
   when:
@@ -22,7 +22,7 @@
     - ansible_os_family == "RedHat"
 
 - name: Install lsof (Debian family)
-  package:
+  ansible.builtin.package:
     name: lsof
     state: present
   when:
@@ -30,7 +30,7 @@
     - ansible_os_family == "Debian"
 
 - name: Install kmod for lsmod (RedHat family)
-  package:
+  ansible.builtin.package:
     name: kmod
     state: present
   when:
@@ -38,7 +38,7 @@
     - ansible_os_family == "RedHat"
 
 - name: Install kmod for lsmod (Debian family)
-  package:
+  ansible.builtin.package:
     name: kmod
     state: present
   when:
@@ -46,10 +46,10 @@
     - ansible_os_family == "Debian"
 
 - name: Check for eBPF LSM support (if eBPF mitigation enabled)
-  when: (mitigation_flags | int) & MITIGATE_EBPF_LSM
+  when: flag_ebpf_enabled
   block:
     - name: Check kernel version for eBPF LSM
-      shell: |
+      ansible.builtin.shell: |
         KERNEL_VER=$(uname -r | cut -d. -f1,2)
         if (( $(echo "$KERNEL_VER >= {{ ebpf_required_kernel }}" | bc -l) )); then
           echo "SUFFICIENT"
@@ -60,18 +60,18 @@
       changed_when: false
 
     - name: Check if CONFIG_BPF_LSM is enabled
-      shell: grep "CONFIG_BPF_LSM=y" /boot/config-$(uname -r) 2>/dev/null || echo "NOT_ENABLED"
+      ansible.builtin.shell: grep "CONFIG_BPF_LSM=y" /boot/config-$(uname -r) 2>/dev/null || echo "NOT_ENABLED"
       register: ebpf_config_check
       changed_when: false
       failed_when: false
 
     - name: Check if BPF LSM is active
-      shell: grep -q "bpf" /sys/kernel/security/lsm 2>/dev/null && echo "ACTIVE" || echo "INACTIVE"
+      ansible.builtin.shell: grep -q "bpf" /sys/kernel/security/lsm 2>/dev/null && echo "ACTIVE" || echo "INACTIVE"
       register: ebpf_lsm_check
       changed_when: false
 
     - name: Set eBPF LSM availability flag
-      set_fact:
+      ansible.builtin.set_fact:
         ebpf_lsm_available: "{{
           ebpf_kernel_check.stdout == 'SUFFICIENT' and
           'CONFIG_BPF_LSM=y' in ebpf_config_check.stdout and
@@ -79,7 +79,7 @@
         }}"
 
     - name: Display eBPF LSM availability
-      debug:
+      ansible.builtin.debug:
         msg:
           - "eBPF LSM Availability Check:"
           - "  Kernel version: {{ ebpf_kernel_check.stdout }}"
@@ -89,17 +89,17 @@
       when: ebpf_lsm_check.stdout == "INACTIVE" or ebpf_kernel_check.stdout == "INSUFFICIENT"
 
 - name: Check SELinux status (if SELinux mitigation enabled)
-  when: (mitigation_flags | int) & MITIGATE_SELINUX
+  when: flag_selinux_enabled
   block:
     - name: Get SELinux status
-      debug:
+      ansible.builtin.debug:
         msg:
           - "SELinux Status: {{ ansible_selinux.status | default('unknown') }}"
           - "SELinux Mode: {{ ansible_selinux.mode | default('unknown') }}"
       when: ansible_selinux is defined
 
     - name: Warn if SELinux is disabled
-      debug:
+      ansible.builtin.debug:
         msg:
           - "WARNING: SELinux mitigation is enabled but SELinux is not available"
           - "SELinux mitigation will be skipped"
@@ -107,15 +107,15 @@
         - ansible_selinux.status is not defined or ansible_selinux.status != "enabled"
 
 - name: Check systemd availability (if seccomp mitigation enabled)
-  when: (mitigation_flags | int) & MITIGATE_SECCOMP
+  when: flag_seccomp_enabled
   block:
     - name: Verify systemd is the service manager
-      debug:
+      ansible.builtin.debug:
         msg: "systemd seccomp mitigation available"
       when: ansible_service_mgr == "systemd"
 
     - name: Warn if systemd is not available
-      debug:
+      ansible.builtin.debug:
         msg:
           - "WARNING: systemd seccomp mitigation is enabled but systemd is not the service manager"
           - "Current service manager: {{ ansible_service_mgr }}"

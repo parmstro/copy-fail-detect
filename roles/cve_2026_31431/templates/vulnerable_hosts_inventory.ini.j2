@@ -1,0 +1,31 @@
+# CVE-2026-31431 (Copy Fail) Vulnerable Hosts Inventory
+# Generated: {{ now(utc=true, fmt='%Y-%m-%dT%H:%M:%SZ') }}
+# Total vulnerable hosts: {{ groups['vulnerable_hosts_for_summary'] | default([]) | length }}
+#
+# This inventory contains hosts identified as vulnerable to CVE-2026-31431
+# Each host has recommended mitigation settings configured
+#
+# Usage:
+#   ansible-playbook -i vulnerable_hosts.ini cve_2026_31431_playbook.yml -e apply_remediation=true
+
+[vulnerable_hosts]
+{% for host in groups['vulnerable_hosts_for_summary'] | default([]) %}
+{{ host }} ansible_host={{ hostvars[host].ansible_host | default(host) }} recommended_mitigation_flags={{ hostvars[host].recommended_mitigation_flags | default(recommended_mitigation_flags) }}
+{% endfor %}
+
+[vulnerable_hosts:vars]
+# Default recommended mitigation: SELinux + Module Blacklist
+# mitigation_flags: 3 (1 = Module Blacklist, 2 = SELinux)
+apply_remediation=false
+mitigation_flags={{ recommended_mitigation_flags }}
+
+# Individual flag values for reference:
+# MITIGATE_MODULE_BLACKLIST=1  (prevents modprobe loading)
+# MITIGATE_SELINUX=2           (blocks at syscall level)
+# MITIGATE_SECCOMP=4           (per-service filtering)
+# MITIGATE_EBPF_LSM=8          (dynamic kernel enforcement)
+#
+# Common combinations:
+#   3 = Module Blacklist + SELinux (RECOMMENDED for most systems)
+#   7 = Module Blacklist + SELinux + seccomp (maximum protection)
+#  15 = All mitigations (requires kernel 5.7+ for eBPF LSM)

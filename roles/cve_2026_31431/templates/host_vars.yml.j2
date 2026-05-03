@@ -1,0 +1,89 @@
+---
+# CVE-2026-31431 Host Variables for {{ item }}
+# Generated: {{ now(utc=true, fmt='%Y-%m-%dT%H:%M:%SZ') }}
+#
+# Place this file in: host_vars/{{ item }}.yml
+
+# =============================================================================
+# HOST INFORMATION
+# =============================================================================
+
+hostname: {{ item }}
+ansible_host: {{ hostvars[item].ansible_host | default(item) }}
+
+# =============================================================================
+# VULNERABILITY ASSESSMENT
+# =============================================================================
+
+cve_2026_31431_assessment:
+  cve_id: CVE-2026-31431
+  cve_name: Copy Fail
+  assessed_date: {{ now(utc=true, fmt='%Y-%m-%dT%H:%M:%SZ') }}
+
+  # Vulnerability status
+  kernel_version: "{{ hostvars[item].cve_assessment.kernel_version | default('unknown') }}"
+  kernel_in_vulnerable_range: {{ hostvars[item].cve_assessment.kernel_in_vulnerable_range | default(false) }}
+  module_exists: {{ hostvars[item].cve_assessment.algif_aead_module_exists | default(false) }}
+  module_loaded: {{ hostvars[item].cve_assessment.algif_aead_currently_loaded | default(false) }}
+  actively_exploitable: {{ hostvars[item].cve_assessment.actively_exploitable | default(false) }}
+
+  # Current protections
+  module_blacklisted: {{ hostvars[item].cve_assessment.algif_aead_blacklisted | default(false) }}
+  selinux_policy_installed: {{ hostvars[item].cve_assessment.selinux_policy_installed | default(false) }}
+  seccomp_services_protected: {{ hostvars[item].cve_assessment.seccomp_services_count | default(0) }}
+
+# =============================================================================
+# RECOMMENDED REMEDIATION
+# =============================================================================
+
+# Recommended mitigation strategy for this host
+# Based on assessment: SELinux + Module Blacklist (flag 3)
+recommended_mitigation_flags: {{ hostvars[item].recommended_mitigation_flags | default(recommended_mitigation_flags) }}
+
+# Rationale:
+{% if hostvars[item].ansible_selinux.status is defined and hostvars[item].ansible_selinux.status == 'enabled' %}
+#   ✓ SELinux is enabled - primary defense available
+{% else %}
+#   ⚠ SELinux not enabled - consider flag 1 (module blacklist only) or 4 (seccomp)
+{% endif %}
+{% if hostvars[item].cve_assessment.actively_exploitable | default(false) %}
+#   ⚠ CRITICAL: Module is currently loaded and exploitable
+#   → Immediate action recommended
+{% endif %}
+
+# =============================================================================
+# MITIGATION FLAGS EXPLAINED
+# =============================================================================
+#
+# Flag 1 (Module Blacklist):
+#   - Prevents modprobe algif_aead
+#   - Persists across reboots
+#   - Works on all kernel versions
+#
+# Flag 2 (SELinux):
+#   - Blocks AF_ALG socket creation at LSM layer
+#   - Works even if module is loaded
+#   - Cannot be bypassed from userspace
+#   - Requires: SELinux in Enforcing mode
+#
+# Flag 3 (Module Blacklist + SELinux) - RECOMMENDED:
+#   - Defense-in-depth: two independent layers
+#   - Primary defense (SELinux) + backup (blacklist)
+#   - Enterprise Linux best practice
+#
+# Flag 7 (Module Blacklist + SELinux + seccomp):
+#   - Maximum protection
+#   - Adds per-service isolation
+#   - Recommended for production systems
+#
+# Flag 15 (All mitigations):
+#   - Includes eBPF LSM (requires kernel 5.7+)
+#   - Advanced dynamic enforcement
+#   - Only for modern systems (RHEL 9, Fedora 38+)
+#
+# =============================================================================
+
+# To apply recommended mitigations to this host:
+#   ansible-playbook cve_2026_31431_playbook.yml \
+#     -e apply_remediation=true \
+#     --limit {{ item }}

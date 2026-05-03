@@ -20,6 +20,20 @@
     - cve_2026_31431
 
 # =============================================================================
+# Create Dynamic Group for Vulnerable Hosts
+# =============================================================================
+# This play creates the 'vulnerable_hosts' group needed for targeting and
+# inventory generation. Must run after assessment.
+#
+- name: Create dynamic group for vulnerable hosts
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Add vulnerable hosts to dynamic group
+      ansible.builtin.group_by:
+        key: "{{ 'vulnerable_hosts' if (vulnerable_host | default(false)) else 'safe_hosts' }}"
+
+# =============================================================================
 # Example 2: Apply Module Blacklist Only (Safest Single Mitigation)
 # =============================================================================
 # Uncomment this play to apply only module blacklist mitigation
@@ -39,9 +53,9 @@
 #     - cve_2026_31431
 
 # =============================================================================
-# Example 3: Apply Recommended Mitigations (Module Blacklist + SELinux + seccomp)
+# Example 3: Apply Recommended Mitigations (Module Blacklist + SELinux)
 # =============================================================================
-# Uncomment this play to apply the recommended defense-in-depth strategy
+# Uncomment this play to apply the recommended default mitigation strategy
 # This is the recommended configuration for Enterprise Linux systems
 #
 # Usage: ansible-playbook sample_playbook.yml -e "skip_assessment=true"
@@ -53,7 +67,7 @@
 #
 #   vars:
 #     apply_remediation: true
-#     mitigation_flags: 7  # Module blacklist (1) + SELinux (2) + seccomp (4)
+#     mitigation_flags: 3  # Module blacklist (1) + SELinux (2) - DEFAULT RECOMMENDED
 #
 #   roles:
 #     - cve_2026_31431
@@ -104,12 +118,43 @@
 # Example 6: Target Only Vulnerable Hosts
 # =============================================================================
 # This example shows how to assess first, then remediate only vulnerable hosts
+# The vulnerable_hosts group is automatically created by the group_by play above
 #
-# Step 1: Run assessment (creates vulnerable_hosts group)
+# Step 1: Run assessment
 # ansible-playbook sample_playbook.yml
 #
-# Step 2: Remediate only vulnerable hosts
-# ansible-playbook sample_playbook.yml --limit vulnerable_hosts -e apply_remediation=true -e mitigation_flags=7
+# Step 2: Remediate only vulnerable hosts (using the created group)
+# ansible-playbook sample_playbook.yml --limit vulnerable_hosts -e apply_remediation=true -e mitigation_flags=3
+
+# =============================================================================
+# Example 7: Generate Inventory with Vulnerable Hosts and Recommendations
+# =============================================================================
+# Assess systems and generate inventory files with vulnerable hosts
+# Each host will have recommended mitigation flags (default: SELinux + Module Blacklist)
+#
+# Usage: ansible-playbook sample_playbook.yml -e generate_inventory=true
+#
+# This will create:
+#   - vulnerable_inventory/vulnerable_hosts.yml        (YAML inventory)
+#   - vulnerable_inventory/vulnerable_hosts.ini        (INI inventory)
+#   - vulnerable_inventory/group_vars_vulnerable_hosts.yml
+#   - vulnerable_inventory/host_vars/<hostname>.yml    (per-host details)
+#
+# After generation, apply recommended mitigations:
+# ansible-playbook -i vulnerable_inventory/vulnerable_hosts.yml cve_2026_31431_playbook.yml -e apply_remediation=true
+#
+# - name: Generate Vulnerable Hosts Inventory
+#   hosts: all
+#   become: true
+#   gather_facts: true
+#
+#   vars:
+#     generate_inventory: true
+#     inventory_output_dir: ./vulnerable_inventory
+#     recommended_mitigation_flags: 3  # SELinux + Module Blacklist (RECOMMENDED)
+#
+#   roles:
+#     - cve_2026_31431
 
 # =============================================================================
 # Quick Reference: Mitigation Flags
@@ -123,9 +168,16 @@
 #
 # Common Combinations:
 #   mitigation_flags: 1       # Module blacklist only (baseline)
-#   mitigation_flags: 3       # Module blacklist + SELinux (minimum recommended)
-#   mitigation_flags: 7       # Module blacklist + SELinux + seccomp (RECOMMENDED)
+#   mitigation_flags: 3       # Module blacklist + SELinux (DEFAULT RECOMMENDED)
+#   mitigation_flags: 7       # Module blacklist + SELinux + seccomp (enhanced protection)
 #   mitigation_flags: 15      # All mitigations (modern systems only)
+#
+# Recommended for Inventory Generation:
+#   recommended_mitigation_flags: 3  # SELinux + Module Blacklist
+#   - Defense-in-depth: two independent protection layers
+#   - Works on all Enterprise Linux systems
+#   - Auto-calculated per host based on SELinux availability
+#   - Flag 3 if SELinux enabled, Flag 1 if SELinux not available
 #
 # How to Calculate Flags:
 #   Want Module Blacklist + SELinux? 1 + 2 = 3

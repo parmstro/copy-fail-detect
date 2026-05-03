@@ -2,7 +2,7 @@
 # Reporting tasks for CVE-2026-31431
 
 - name: Create enhanced JSON report
-  set_fact:
+  ansible.builtin.set_fact:
     json_report_enhanced:
       assessment: "{{ cve_assessment }}"
       mitigations_applied:
@@ -15,61 +15,65 @@
       timestamp: "{{ ansible_date_time.iso8601 }}"
 
 - name: Save assessment to local file
-  copy:
-    content: "{{ json_report_enhanced | to_nice_json }}"
+  ansible.builtin.copy:
+    content: "{{ hostvars[inventory_hostname].json_report_enhanced | to_nice_json }}"
     dest: "{{ report_dir }}/{{ report_filename }}"
   delegate_to: localhost
   become: false
 
-- name: Display remediation information
-  debug:
+- name: Build list of vulnerable hosts
+  ansible.builtin.set_fact:
+    _vulnerable_hosts_list: "{{ groups['all'] | select('in', hostvars.keys()) | select('match', '.*') | map('extract', hostvars) | selectattr('vulnerable_host', 'defined') | selectattr('vulnerable_host', 'equalto', true) | map(attribute='inventory_hostname') | list }}"
+  run_once: true
+  when: not (apply_remediation | default(false) | bool)
+
+- name: Add all vulnerable hosts to group
+  ansible.builtin.add_host:
+    name: "{{ item }}"
+    groups: vulnerable_hosts_for_summary
+  loop: "{{ _vulnerable_hosts_list | default([]) }}"
+  run_once: true
+  when: not (apply_remediation | default(false) | bool)
+  # Protection logic defined in assessment.yml sets vulnerable_host fact
+  # Host is considered safe (not vulnerable) if it has:
+  #   Module Blacklist + at least one non-bypassable protection (SELinux OR seccomp OR eBPF)
+  #
+  # - Module Blacklist alone CAN be bypassed by root (via insmod)
+  # - SELinux, seccomp, and eBPF LSM CANNOT be bypassed by root
+  #
+  # Coverage gaps to be aware of:
+  # - SELinux: Only covers specified domains (user_t, unconfined_t, httpd_t, postgresql_t, mysqld_t)
+  #   Attack vectors in uncovered domains could bypass SELinux protection
+  # - systemd seccomp: Only protects configured services (httpd, nginx, postgresql, etc.)
+  #   Attack vectors outside these services could bypass seccomp protection
+  #
+  # Recommended: Module Blacklist + SELinux (flag 3) provides most comprehensive protection
+  # because user_t and unconfined_t cover the vast majority of attack scenarios
+
+- name: Display vulnerable hosts summary
+  ansible.builtin.debug:
     msg:
-      - "=========================================="
-      - "CVE-2026-31431 REMEDIATION INFORMATION"
-      - "=========================================="
       - ""
-      - "AVAILABLE MITIGATIONS:"
+      - "VULNERABLE HOSTS REQUIRING REMEDIATION:"
+      - "{{ groups['vulnerable_hosts_for_summary'] | default([]) | join(', ') }}"
       - ""
-      - "1. MODULE BLACKLIST (Flag: {{ MITIGATE_MODULE_BLACKLIST }})"
-      - "   - Blacklist algif_aead kernel module"
-      - "   - Prevents modprobe loading"
-      - "   - Status: {{ 'ENABLED' if (mitigation_flags | int) & MITIGATE_MODULE_BLACKLIST else 'disabled' }}"
+      - "DEFAULT RECOMMENDED MITIGATION: Flag 3 (Module Blacklist + SELinux)"
+      - "  Complete protection requires: Module Blacklist + non-bypassable layer"
+      - "  - Module Blacklist alone CAN be bypassed by root (via insmod)"
+      - "  - SELinux/seccomp/eBPF CANNOT be bypassed by root"
+      - "  - Flag 3 covers user_t/unconfined_t (vast majority of scenarios)"
+      - "  - Note: SELinux only covers configured domains; gaps may exist"
       - ""
-      - "2. SELINUX POLICY (Flag: {{ MITIGATE_SELINUX }})"
-      - "   - Block AF_ALG socket creation at LSM layer"
-      - "   - Works even if module is loaded"
-      - "   - Status: {{ 'ENABLED' if (mitigation_flags | int) & MITIGATE_SELINUX else 'disabled' }}"
-      - "   - Available: {{ 'Yes' if ansible_selinux.status is defined and ansible_selinux.status == 'enabled' else 'No (SELinux not enabled)' }}"
-      - ""
-      - "3. SYSTEMD SECCOMP (Flag: {{ MITIGATE_SECCOMP }})"
-      - "   - Per-service syscall filtering"
-      - "   - RestrictAddressFamilies=~AF_ALG"
-      - "   - Status: {{ 'ENABLED' if (mitigation_flags | int) & MITIGATE_SECCOMP else 'disabled' }}"
-      - "   - Available: {{ 'Yes' if ansible_service_mgr == 'systemd' else 'No (systemd not used)' }}"
-      - ""
-      - "4. EBPF LSM (Flag: {{ MITIGATE_EBPF_LSM }})"
-      - "   - Dynamic kernel-level socket blocking"
-      - "   - Requires kernel 5.7+ with CONFIG_BPF_LSM"
-      - "   - Status: {{ 'ENABLED' if (mitigation_flags | int) & MITIGATE_EBPF_LSM else 'disabled' }}"
-      - "   - Available: {{ 'Yes' if ebpf_lsm_available | default(false) else 'No (kernel too old or LSM not configured)' }}"
-      - ""
-      - "DEFENSE-IN-DEPTH STRATEGY:"
-      - "  Use multiple layers for maximum protection"
-      - "  Recommended: Module Blacklist (1) + SELinux (2) + seccomp (4) = Flag 7"
-      - ""
-      - "TO APPLY REMEDIATION:"
-      - "  ansible-playbook -e apply_remediation=true -e mitigation_flags=7 <playbook>"
-      - ""
-      - "TO TARGET ONLY VULNERABLE HOSTS:"
-      - "  ansible-playbook -e apply_remediation=true --limit vulnerable_hosts <playbook>"
-      - ""
-      - "=========================================="
+      - "Per-host assessments saved to: /root/cve-2026-31431-assessment-<hostname>.txt"
+  delegate_to: localhost
+  run_once: true
   when:
-    - cve_assessment.potentially_vulnerable | default(false)
+    - groups['vulnerable_hosts_for_summary'] is defined
+    - groups['vulnerable_hosts_for_summary'] | length > 0
     - not apply_remediation
 
 - name: Create summary for role execution
-  set_fact:
+  ansible.builtin.set_fact:
     role_summary:
       host: "{{ inventory_hostname }}"
       vulnerability_status: "{{ vulnerability_status | trim }}"

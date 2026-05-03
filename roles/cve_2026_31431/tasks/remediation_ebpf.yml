@@ -3,7 +3,7 @@
 # Initial implementation by Anthony Green (@atgreen)
 
 - name: "EBPF - Install required packages"
-  package:
+  ansible.builtin.package:
     name:
       - clang
       - llvm
@@ -14,7 +14,7 @@
   when: ansible_os_family == "RedHat"
 
 - name: "EBPF - Create source directory"
-  file:
+  ansible.builtin.file:
     path: "{{ ebpf_src_dir }}"
     state: directory
     mode: '0755'
@@ -22,7 +22,7 @@
     group: root
 
 - name: "EBPF - Create installation directory"
-  file:
+  ansible.builtin.file:
     path: "{{ ebpf_install_dir }}"
     state: directory
     mode: '0755'
@@ -30,7 +30,7 @@
     group: root
 
 - name: "EBPF - Copy BPF program source"
-  template:
+  ansible.builtin.template:
     src: block_af_alg_lsm.bpf.c.j2
     dest: "{{ ebpf_src_dir }}/{{ ebpf_program_name }}.bpf.c"
     mode: '0644'
@@ -39,7 +39,7 @@
   register: ebpf_source
 
 - name: "EBPF - Compile BPF program"
-  shell: |
+  ansible.builtin.shell: |
     clang -O2 -g -target bpf \
       -D__TARGET_ARCH_x86 \
       -I/usr/include/bpf \
@@ -52,7 +52,7 @@
   notify: eBPF LSM program loaded
 
 - name: "EBPF - Load BPF LSM program"
-  shell: |
+  ansible.builtin.shell: |
     bpftool prog load {{ ebpf_install_dir }}/{{ ebpf_program_name }}.bpf.o \
       {{ bpf_fs }}/{{ ebpf_program_name }} type lsm
   args:
@@ -62,14 +62,14 @@
   notify: eBPF LSM program loaded
 
 - name: "EBPF - Verify BPF program is loaded"
-  command: bpftool prog show
+  ansible.builtin.command: bpftool prog show
   register: bpftool_show
   changed_when: false
   failed_when: ebpf_program_name not in bpftool_show.stdout
   when: ebpf_loaded is changed
 
 - name: "EBPF - Create systemd service for persistent loading"
-  template:
+  ansible.builtin.template:
     src: ebpf_loader.service.j2
     dest: /etc/systemd/system/cve-2026-31431-ebpf-lsm.service
     mode: '0644'
@@ -79,19 +79,19 @@
   notify: eBPF LSM program loaded
 
 - name: "EBPF - Reload systemd daemon"
-  systemd:
+  ansible.builtin.systemd:
     daemon_reload: true
   when: ebpf_service is changed
 
 - name: "EBPF - Enable and start eBPF loader service"
-  systemd:
+  ansible.builtin.systemd:
     name: cve-2026-31431-ebpf-lsm.service
     enabled: true
     state: started
   when: ebpf_service is changed or ebpf_loaded is changed
 
 - name: "EBPF - Test AF_ALG blocking"
-  shell: |
+  ansible.builtin.shell: |
     python3 -c "import socket; socket.socket(38, 2, 0)" 2>&1 || true
   register: ebpf_test
   changed_when: false
@@ -99,7 +99,7 @@
   when: ebpf_loaded is changed
 
 - name: "EBPF - Display success message"
-  debug:
+  ansible.builtin.debug:
     msg:
       - "=========================================="
       - "EBPF LSM REMEDIATION SUCCESSFUL"
@@ -128,6 +128,6 @@
   when: ebpf_loaded is changed
 
 - name: Set eBPF remediation flag
-  set_fact:
+  ansible.builtin.set_fact:
     remediation_ebpf_applied: true
   when: ebpf_loaded is changed or ebpf_service is changed

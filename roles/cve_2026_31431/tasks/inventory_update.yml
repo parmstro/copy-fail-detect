@@ -1,0 +1,74 @@
+---
+# Inventory update tasks for CVE-2026-31431
+# Generates inventory files with vulnerable hosts and remediation recommendations
+
+- name: Create inventory output directory
+  ansible.builtin.file:
+    path: "{{ inventory_output_dir }}"
+    state: directory
+    mode: '0755'
+  become: false
+
+- name: Generate vulnerable hosts inventory file
+  ansible.builtin.template:
+    src: vulnerable_hosts_inventory.ini.j2
+    dest: "{{ inventory_output_dir }}/vulnerable_hosts.ini"
+    mode: '0644'
+  become: false
+
+- name: Generate vulnerable hosts YAML inventory
+  ansible.builtin.template:
+    src: vulnerable_hosts_inventory.yml.j2
+    dest: "{{ inventory_output_dir }}/vulnerable_hosts.yml"
+    mode: '0644'
+  become: false
+
+- name: Generate group_vars for vulnerable hosts
+  ansible.builtin.template:
+    src: vulnerable_hosts_group_vars.yml.j2
+    dest: "{{ inventory_output_dir }}/group_vars_vulnerable_hosts.yml"
+    mode: '0644'
+  become: false
+
+- name: Create host_vars directory
+  ansible.builtin.file:
+    path: "{{ inventory_output_dir }}/host_vars"
+    state: directory
+    mode: '0755'
+  become: false
+  when: groups['vulnerable_hosts_for_summary'] is defined and groups['vulnerable_hosts_for_summary'] | length > 0
+
+- name: Generate host_vars for each vulnerable host
+  ansible.builtin.template:
+    src: host_vars.yml.j2
+    dest: "{{ inventory_output_dir }}/host_vars/{{ item }}.yml"
+    mode: '0644'
+  become: false
+  loop: "{{ groups['vulnerable_hosts_for_summary'] | default([]) }}"
+  when: groups['vulnerable_hosts_for_summary'] is defined and groups['vulnerable_hosts_for_summary'] | length > 0
+
+- name: Display inventory update summary
+  ansible.builtin.debug:
+    msg:
+      - "=========================================="
+      - "INVENTORY FILES GENERATED"
+      - "=========================================="
+      - "Location: {{ inventory_output_dir }}"
+      - ""
+      - "Files created:"
+      - "  - vulnerable_hosts.ini          (INI format inventory)"
+      - "  - vulnerable_hosts.yml          (YAML format inventory)"
+      - "  - group_vars_vulnerable_hosts.yml  (Recommended settings for group)"
+      - "  - host_vars/<hostname>.yml      (Per-host settings)"
+      - ""
+      - "Vulnerable hosts: {{ groups['vulnerable_hosts_for_summary'] | default([]) | length }}"
+      - "Default recommended mitigation: {{ recommended_mitigation_flags }}"
+      - ""
+      - "To use the generated inventory:"
+      - "  ansible-playbook -i {{ inventory_output_dir }}/vulnerable_hosts.yml playbook.yml"
+      - ""
+      - "To apply recommended mitigations:"
+      - "  ansible-playbook -i {{ inventory_output_dir }}/vulnerable_hosts.yml \\"
+      - "    cve_2026_31431_playbook.yml -e apply_remediation=true"
+      - "=========================================="
+  when: groups['vulnerable_hosts_for_summary'] is defined and groups['vulnerable_hosts_for_summary'] | length > 0

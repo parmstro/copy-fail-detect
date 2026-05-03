@@ -2,21 +2,21 @@
 # handlers file for cve_2026_31431
 
 - name: Module blacklist applied
-  debug:
+  ansible.builtin.debug:
     msg: "Module blacklist configuration has been applied"
 
 - name: SELinux policy applied
-  debug:
+  ansible.builtin.debug:
     msg: "SELinux policy has been installed and activated"
 
 - name: Reload systemd
-  systemd:
+  ansible.builtin.systemd:
     daemon_reload: true
 
 - name: Restart protected services
-  debug:
+  ansible.builtin.debug:
     msg: "Protected services will be restarted to apply seccomp filters"
 
 - name: eBPF LSM program loaded
-  debug:
+  ansible.builtin.debug:
     msg: "eBPF LSM program has been loaded into the kernel"

@@ -1,19 +1,22 @@
-# Ansible
-*.retry
-*.log
-.vault_pass
+# Inventory files (user-specific)
+inventory
+!inventory/.gitkeep
+
+# Generated inventory output
+inventory_output/
 
 # Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
-.Python
 
-# Virtual environments
-venv/
-env/
-ENV/
+# Ansible
+*.retry
+
+# Assessment reports
+/tmp/cve-2026-31431-*.json
+/root/cve-2026-31431-assessment-*.txt
 
 # IDE
 .vscode/
@@ -25,12 +28,3 @@ ENV/
 # OS
 .DS_Store
 Thumbs.db
-
-# Temporary files
-/tmp/
-*.tmp
-*.bak
-
-# Reports
-/reports/
-cve-*.json

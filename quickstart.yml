@@ -3,11 +3,20 @@
 #
 # This is the simplest possible playbook to get started with cfDr.
 #
+# USAGE:
+#   ansible-playbook -i inventory -u admin --ask-pass quickstart.yml
+#
+# For localhost testing:
+#   ansible-playbook -c local --ask-become-pass quickstart.yml
+#
 # STEP 1: Run assessment to find vulnerable hosts
-#   ansible-playbook quickstart.yml
+#   ansible-playbook -i inventory -u admin --ask-pass quickstart.yml
 #
 # STEP 2: Apply recommended mitigations to vulnerable hosts
-#   ansible-playbook quickstart.yml --limit vulnerable_hosts -e apply_remediation=true
+#   ansible-playbook -i inventory -u admin --ask-pass quickstart.yml --limit vulnerable_hosts -e apply_remediation=true
+#
+# Generate inventory files:
+#   ansible-playbook -i inventory -u admin --ask-pass quickstart.yml -e generate_inventory=true
 #
 
 - name: CVE-2026-31431 (Copy Fail) Protection
@@ -19,9 +28,30 @@
     # Set to true to apply mitigations (default: false = assessment only)
     apply_remediation: false
 
-    # Mitigation flags: 7 = Module Blacklist + SELinux + seccomp (recommended)
-    # Change to 1 for module blacklist only, or 15 for all mitigations
-    mitigation_flags: 7
+    # Mitigation flags: 3 = Module Blacklist + SELinux (recommended default)
+    # Change to 7 for Module Blacklist + SELinux + seccomp, or 15 for all mitigations
+    mitigation_flags: 3
 
   roles:
     - cve_2026_31431
+
+- name: Generate inventory files
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Include inventory generation tasks
+      ansible.builtin.include_role:
+        name: cve_2026_31431
+        tasks_from: inventory_update
+      when:
+        - generate_inventory | default(false)
+        - groups['vulnerable_hosts_for_summary'] is defined
+        - groups['vulnerable_hosts_for_summary'] | length > 0
+
+- name: Create dynamic group for vulnerable hosts
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Add vulnerable hosts to dynamic group
+      ansible.builtin.group_by:
+        key: "{{ 'vulnerable_hosts' if (vulnerable_host | default(false)) else 'safe_hosts' }}"

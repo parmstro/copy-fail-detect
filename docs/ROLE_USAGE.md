@@ -25,13 +25,14 @@ See `sample_playbook.yml` for comprehensive examples:
 
 **File:** [`sample_playbook.yml`](sample_playbook.yml)
 
-**Contains 6 examples:**
+**Contains 7 examples:**
 1. Assessment only (default)
 2. Module blacklist only (safest single mitigation)
 3. Recommended mitigations (Module Blacklist + SELinux + seccomp)
 4. All mitigations including eBPF LSM
 5. Custom configuration for web servers
 6. Two-step assess-then-remediate workflow
+7. **NEW:** Generate inventory with vulnerable hosts and recommendations
 
 **Usage:** Uncomment the example you want to try and run:
 ```bash
@@ -142,6 +143,20 @@ ansible-playbook cve_2026_31431_playbook.yml \
   --limit vulnerable_hosts
 ```
 
+#### 5. Generate Inventory with Recommended Mitigations (NEW)
+
+```bash
+# Step 1: Assess and generate inventory
+ansible-playbook cve_2026_31431_playbook.yml \
+  -e generate_inventory=true \
+  -e inventory_output_dir=./vuln_inventory
+
+# Step 2: Apply recommended mitigations (Flag 3: SELinux + Module Blacklist)
+ansible-playbook -i vuln_inventory/vulnerable_hosts.yml \
+  cve_2026_31431_playbook.yml \
+  -e apply_remediation=true
+```
+
 ### Using the Role in Your Playbooks
 
 #### Method 1: Include in Playbook
@@ -199,6 +214,66 @@ ansible-playbook cve_2026_31431_playbook.yml \
 ```
 
 ### Advanced Usage
+
+#### Generate Inventory with Vulnerable Hosts (NEW)
+
+Generate dedicated inventory files containing only vulnerable hosts with recommended mitigation settings:
+
+```yaml
+- hosts: all
+  become: true
+  gather_facts: true
+  
+  vars:
+    generate_inventory: true
+    inventory_output_dir: ./vulnerable_inventory
+    recommended_mitigation_flags: 3  # SELinux + Module Blacklist
+  
+  roles:
+    - cve_2026_31431
+```
+
+Or via command line:
+
+```bash
+# Generate inventory during assessment
+ansible-playbook quickstart.yml \
+  -e generate_inventory=true \
+  -e inventory_output_dir=./vuln_inventory
+
+# Use generated inventory for remediation
+ansible-playbook -i vuln_inventory/vulnerable_hosts.yml \
+  cve_2026_31431_playbook.yml \
+  -e apply_remediation=true
+```
+
+**What gets generated:**
+
+```
+vulnerable_inventory/
+├── vulnerable_hosts.yml                 # YAML inventory with vulnerability details
+├── vulnerable_hosts.ini                 # INI format inventory
+├── group_vars_vulnerable_hosts.yml      # Recommended mitigation settings
+└── host_vars/
+    ├── host1.yml                        # Per-host assessment and recommendations
+    └── host2.yml
+```
+
+**Key Features:**
+- Each host gets `recommended_mitigation_flags` auto-calculated based on SELinux availability
+  - **Flag 3** (SELinux + Module Blacklist) if SELinux is enabled ✅ **RECOMMENDED**
+  - **Flag 1** (Module Blacklist only) if SELinux not available
+- Defense-in-depth: Two independent protection layers
+- Ready to use: All variables configured for immediate remediation
+- Comprehensive documentation in generated group_vars file
+
+**Why Flag 3 (SELinux + Module Blacklist) is Recommended:**
+
+| Layer | Purpose | Benefit |
+|-------|---------|---------|
+| SELinux (2) | Primary defense | Blocks socket creation at LSM layer, works even if module is loaded |
+| Module Blacklist (1) | Backup defense | Prevents modprobe loading, persists across reboots |
+| Combined (3) | Defense-in-depth | If either layer fails, the other still protects |
 
 #### Customize Services for seccomp Protection
 
@@ -345,7 +420,14 @@ ansible-playbook cve_2026_31431_playbook.yml \
    - Show available mitigations
    - Provide next-step recommendations
 
-5. **Cleanup** (`cleanup.yml` - optional)
+5. **Inventory Generation** (`inventory_update.yml` - optional)
+   - Generate vulnerable hosts inventory files
+   - Create group variables with recommended mitigations
+   - Generate per-host assessment details
+   - Support both YAML and INI inventory formats
+   - Auto-calculate recommended flags (Flag 3 if SELinux enabled, Flag 1 otherwise)
+
+6. **Cleanup** (`cleanup.yml` - optional)
    - Remove blacklist configurations
    - Uninstall SELinux policy
    - Remove seccomp drop-ins

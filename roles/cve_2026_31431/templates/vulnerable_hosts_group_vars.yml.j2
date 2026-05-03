@@ -1,0 +1,88 @@
+---
+# CVE-2026-31431 Vulnerable Hosts Group Variables
+# Generated: {{ now(utc=true, fmt='%Y-%m-%dT%H:%M:%SZ') }}
+#
+# Place this file in: group_vars/vulnerable_hosts.yml
+# Or use with: ansible-playbook playbook.yml -e @group_vars_vulnerable_hosts.yml
+
+# =============================================================================
+# REMEDIATION CONTROL
+# =============================================================================
+
+# Apply remediation (set to true to fix vulnerable systems)
+apply_remediation: false
+
+# Recommended mitigation strategy for these hosts
+# Flag {{ recommended_mitigation_flags }} = Module Blacklist (1) + SELinux (2)
+mitigation_flags: {{ recommended_mitigation_flags }}
+
+# =============================================================================
+# MITIGATION FLAG REFERENCE
+# =============================================================================
+#
+# Individual Flags:
+#   MITIGATE_MODULE_BLACKLIST: 1  # Prevents modprobe loading
+#   MITIGATE_SELINUX:          2  # Blocks at syscall level (RHEL/Fedora)
+#   MITIGATE_SECCOMP:          4  # Per-service filtering
+#   MITIGATE_EBPF_LSM:         8  # Dynamic kernel enforcement (5.7+)
+#
+# Recommended Combinations:
+#   mitigation_flags: 3   # Module Blacklist + SELinux (RECOMMENDED)
+#   mitigation_flags: 7   # Module Blacklist + SELinux + seccomp (maximum)
+#   mitigation_flags: 15  # All mitigations (modern kernels only)
+#
+# Why Flag {{ recommended_mitigation_flags }} is Recommended:
+#   ✓ Module Blacklist (1): Prevents casual loading via modprobe
+#   ✓ SELinux (2):          Primary defense, blocks at LSM layer
+#   ✓ Defense-in-depth:     Two independent protection layers
+#   ✓ Enterprise-ready:     Works on all RHEL/CentOS/Fedora versions
+#   ✓ No reboot required:   Both mitigations active immediately
+#
+# =============================================================================
+# RATIONALE FOR SELINUX + MODULE BLACKLIST
+# =============================================================================
+#
+# Layer 1: SELinux (Primary Defense)
+#   - Blocks socket() syscall at kernel LSM layer
+#   - Works even if algif_aead module is loaded
+#   - Cannot be bypassed from userspace
+#   - Provides audit trail of blocked attempts
+#
+# Layer 2: Module Blacklist (Backup Defense)
+#   - Prevents modprobe algif_aead loading
+#   - Persists across reboots (via initramfs/initrd)
+#   - Protection if SELinux is temporarily disabled
+#
+# Together: If either layer fails, the other still protects
+#
+# =============================================================================
+# CUSTOMIZATION OPTIONS
+# =============================================================================
+
+# Uncomment to add seccomp protection (recommended for production)
+# mitigation_flags: 7  # Adds systemd seccomp filtering
+
+# Uncomment for systems with kernel 5.7+ and eBPF LSM enabled
+# mitigation_flags: 15  # All mitigations including eBPF
+
+# =============================================================================
+# USAGE EXAMPLES
+# =============================================================================
+#
+# Apply recommended mitigations to all vulnerable hosts:
+#   ansible-playbook -i vulnerable_hosts.yml cve_2026_31431_playbook.yml \
+#     -e apply_remediation=true
+#
+# Use higher protection level:
+#   ansible-playbook -i vulnerable_hosts.yml cve_2026_31431_playbook.yml \
+#     -e apply_remediation=true -e mitigation_flags=7
+#
+# Apply to specific vulnerable host:
+#   ansible-playbook -i vulnerable_hosts.yml cve_2026_31431_playbook.yml \
+#     -e apply_remediation=true --limit hostname
+#
+# =============================================================================
+
+# Generated from assessment run
+# Vulnerable hosts identified: {{ groups['vulnerable_hosts_for_summary'] | default([]) | length }}
+# Assessment timestamp: {{ now(utc=true, fmt='%Y-%m-%dT%H:%M:%SZ') }}

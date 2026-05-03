@@ -16,12 +16,12 @@
 # Examples:
 #   mitigation_flags: 1   # Module blacklist only
 #   mitigation_flags: 2   # SELinux only
-#   mitigation_flags: 3   # Module blacklist + SELinux (1 + 2)
-#   mitigation_flags: 7   # All except eBPF LSM (1 + 2 + 4)
+#   mitigation_flags: 3   # Module blacklist + SELinux (1 + 2) - DEFAULT RECOMMENDED
+#   mitigation_flags: 7   # Module blacklist + SELinux + seccomp (1 + 2 + 4) - Enhanced
 #   mitigation_flags: 15  # All mitigations (1 + 2 + 4 + 8)
 #
-# Default: All mitigations except eBPF LSM (moderate approach)
-mitigation_flags: 7
+# Default: Module Blacklist + SELinux (defense-in-depth baseline)
+mitigation_flags: 3
 
 # Individual flag constants (for reference - don't modify these)
 MITIGATE_MODULE_BLACKLIST: 1
@@ -29,6 +29,38 @@ MITIGATE_SELINUX: 2
 MITIGATE_SECCOMP: 4
 MITIGATE_EBPF_LSM: 8
 
+# =============================================================================
+# Protection Levels and Coverage Analysis
+# =============================================================================
+# Understanding what each mitigation protects against:
+#
+# ┌──────────────────┬─────────────────────┬──────────────────────────────────┐
+# │      Method      │  Root Can Bypass?   │        Coverage Gaps             │
+# ├──────────────────┼─────────────────────┼──────────────────────────────────┤
+# │ Module Blacklist │ ✅ (via insmod)     │ Root can bypass with insmod      │
+# ├──────────────────┼─────────────────────┼──────────────────────────────────┤
+# │ SELinux          │ ❌ (LSM layer)      │ Only covers configured domains   │
+# │                  │                     │ (user_t, unconfined_t, httpd_t,  │
+# │                  │                     │  postgresql_t, mysqld_t)         │
+# ├──────────────────┼─────────────────────┼──────────────────────────────────┤
+# │ systemd seccomp  │ ❌ (syscall filter) │ Only protects configured         │
+# │                  │                     │ services (httpd, nginx, etc.)    │
+# ├──────────────────┼─────────────────────┼──────────────────────────────────┤
+# │ eBPF LSM         │ ❌ (LSM layer)      │ Requires kernel 5.7+ (RHEL 9+)   │
+# └──────────────────┴─────────────────────┴──────────────────────────────────┘
+#
+# RECOMMENDED: Flag 3 (Module Blacklist + SELinux)
+# - Module Blacklist prevents accidental/non-malicious module loads
+# - SELinux blocks syscall even if attacker bypasses blacklist with insmod
+# - Covers user_t and unconfined_t which handle vast majority of attack scenarios
+# - Works on all Enterprise Linux distributions (RHEL 7, 8, 9, CentOS, etc.)
+#
+# Complete Protection Requirement:
+# A system is considered fully protected if it has:
+#   Module Blacklist + (SELinux OR seccomp OR eBPF LSM)
+#
+# Any single protection method alone leaves potential bypass routes.
+#
 # =============================================================================
 # Assessment Control
 # =============================================================================
@@ -54,7 +86,7 @@ blacklist_config_file: blacklist-algif_aead-cve-2026-31431.conf
 selinux_policy_module: cve_2026_31431_af_alg_deny
 
 # SELinux policy version
-selinux_policy_version: "1.0"
+selinux_policy_version: 1.0.0
 
 # Directory for SELinux policy build files
 selinux_policy_build_dir: /var/lib/cve-2026-31431-selinux
@@ -119,6 +151,19 @@ report_filename: "cve-2026-31431-{{ inventory_hostname }}.json"
 # Minimum kernel version for vulnerability (major.minor)
 vulnerable_kernel_min_major: 4
 vulnerable_kernel_min_minor: 10
+
+# =============================================================================
+# Inventory Update Configuration
+# =============================================================================
+# Generate inventory files with vulnerable hosts and recommendations
+generate_inventory: false
+
+# Directory for generated inventory files
+inventory_output_dir: "{{ playbook_dir }}/inventory_output"
+
+# Recommended mitigation flags for vulnerable hosts
+# Flag 3 = Module Blacklist (1) + SELinux (2) - Recommended for Enterprise Linux
+recommended_mitigation_flags: 3
 
 # =============================================================================
 # Rollback/Cleanup Options

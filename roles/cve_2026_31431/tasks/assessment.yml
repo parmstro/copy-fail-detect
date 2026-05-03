@@ -2,36 +2,36 @@
 # Vulnerability assessment tasks for CVE-2026-31431
 
 - name: Get kernel version
-  command: uname -r
+  ansible.builtin.command: uname -r
   register: kernel_version
   changed_when: false
 
 - name: Parse kernel version
-  set_fact:
+  ansible.builtin.set_fact:
     kernel_major: "{{ kernel_version.stdout.split('.')[0] | int }}"
     kernel_minor: "{{ kernel_version.stdout.split('.')[1] | int }}"
 
 - name: Check if kernel is potentially vulnerable
-  set_fact:
+  ansible.builtin.set_fact:
     kernel_in_vuln_range: "{{
-      (kernel_major | int > vulnerable_kernel_min_major) or
-      (kernel_major | int == vulnerable_kernel_min_major and kernel_minor | int >= vulnerable_kernel_min_minor)
+      ((kernel_major | int > vulnerable_kernel_min_major) or
+      (kernel_major | int == vulnerable_kernel_min_major and kernel_minor | int >= vulnerable_kernel_min_minor)) | bool
     }}"
 
 - name: Check if algif_aead module exists in kernel
-  shell: modinfo algif_aead
+  ansible.builtin.shell: modinfo algif_aead
   register: algif_aead_modinfo
   changed_when: false
   failed_when: false
 
 - name: Check if algif_aead is currently loaded
-  shell: lsmod | grep algif_aead
+  ansible.builtin.shell: lsmod | grep algif_aead
   register: lsmod_algif_aead
   changed_when: false
   failed_when: false
 
 - name: Check for modules that depend on algif_aead
-  shell: |
+  ansible.builtin.shell: |
     if lsmod | grep -q algif_aead; then
       lsmod | awk '$4 ~ /algif_aead/ {print $1}' | grep -v algif_aead || echo "NONE"
     else
@@ -42,19 +42,19 @@
   failed_when: false
 
 - name: Check for active AF_ALG sockets
-  shell: lsof | grep AF_ALG
+  ansible.builtin.shell: lsof | grep AF_ALG
   register: lsof_af_alg
   changed_when: false
   failed_when: false
 
 - name: Check if algif_aead is blacklisted
-  shell: grep -r algif_aead {{ modprobe_config_dir }}/ /usr/lib/modprobe.d/ 2>/dev/null || true
+  ansible.builtin.shell: grep -r algif_aead {{ modprobe_config_dir }}/ /usr/lib/modprobe.d/ 2>/dev/null || true
   register: algif_blacklist_check
   changed_when: false
   failed_when: false
 
 - name: Check kernel config for CONFIG_CRYPTO_USER_API_AEAD
-  shell: |
+  ansible.builtin.shell: |
     if [ -f /boot/config-{{ kernel_version.stdout }} ]; then
       grep CONFIG_CRYPTO_USER_API_AEAD /boot/config-{{ kernel_version.stdout }} || echo "NOT_FOUND"
     else
@@ -65,7 +65,7 @@
   failed_when: false
 
 - name: Check for existing SELinux policy (if SELinux enabled)
-  shell: semodule -l | grep {{ selinux_policy_module }} || echo "NOT_INSTALLED"
+  ansible.builtin.shell: semodule -l | grep {{ selinux_policy_module }} || echo "NOT_INSTALLED"
   register: selinux_policy_check
   changed_when: false
   failed_when: false
@@ -74,7 +74,7 @@
     - ansible_selinux.status == "enabled"
 
 - name: Check for systemd seccomp restrictions
-  shell: |
+  ansible.builtin.shell: |
     count=0
     for service in {{ seccomp_protected_services | join(' ') }}; do
       if systemctl show $service.service 2>/dev/null | grep -q "RestrictAddressFamilies.*AF_ALG"; then
@@ -88,40 +88,40 @@
   when: ansible_service_mgr == "systemd"
 
 - name: Assess CVE-2026-31431 vulnerability status
-  set_fact:
+  ansible.builtin.set_fact:
     cve_assessment:
       host: "{{ inventory_hostname }}"
       cve_id: "CVE-2026-31431"
       cve_name: "Copy Fail"
       kernel_version: "{{ kernel_version.stdout }}"
-      kernel_in_vulnerable_range: "{{ kernel_in_vuln_range }}"
-      algif_aead_module_exists: "{{ algif_aead_modinfo.rc == 0 }}"
-      algif_aead_currently_loaded: "{{ lsmod_algif_aead.rc == 0 }}"
+      kernel_in_vulnerable_range: "{{ kernel_in_vuln_range | bool }}"
+      algif_aead_module_exists: "{{ (algif_aead_modinfo.rc == 0) | bool }}"
+      algif_aead_currently_loaded: "{{ (lsmod_algif_aead.rc == 0) | bool }}"
       dependent_modules: "{{ algif_aead_dependents.stdout }}"
-      active_af_alg_sockets: "{{ lsof_af_alg.rc == 0 }}"
+      active_af_alg_sockets: "{{ (lsof_af_alg.rc == 0) | bool }}"
       algif_aead_blacklisted: "{{
-        'blacklist algif_aead' in algif_blacklist_check.stdout or
-        'install algif_aead /bin/true' in algif_blacklist_check.stdout
+        ('blacklist algif_aead' in algif_blacklist_check.stdout or
+        'install algif_aead /bin/true' in algif_blacklist_check.stdout) | bool
       }}"
       crypto_config: "{{ crypto_aead_config.stdout }}"
       actively_exploitable: "{{
-        kernel_in_vuln_range and
+        (kernel_in_vuln_range and
         algif_aead_modinfo.rc == 0 and
-        lsmod_algif_aead.rc == 0
+        lsmod_algif_aead.rc == 0) | bool
       }}"
       potentially_vulnerable: "{{
-        kernel_in_vuln_range and
-        algif_aead_modinfo.rc == 0
+        (kernel_in_vuln_range and
+        algif_aead_modinfo.rc == 0) | bool
       }}"
       selinux_policy_installed: "{{
-        (selinux_policy_check.stdout | default('NOT_INSTALLED')) != 'NOT_INSTALLED'
+        ((selinux_policy_check.stdout | default('NOT_INSTALLED')) != 'NOT_INSTALLED'
         if ansible_selinux.status is defined and ansible_selinux.status == 'enabled'
-        else false
+        else false) | bool
       }}"
       seccomp_services_count: "{{ seccomp_services_protected.stdout | default('0') | int }}"
 
 - name: Determine vulnerability status
-  set_fact:
+  ansible.builtin.set_fact:
     vulnerability_status: |
       {% if cve_assessment.kernel_in_vulnerable_range and cve_assessment.algif_aead_module_exists %}
       {% if cve_assessment.algif_aead_blacklisted %}
@@ -137,32 +137,75 @@
       NOT VULNERABLE - Module not available
       {% endif %}
 
-- name: Display detailed CVE-2026-31431 assessment
-  debug:
-    msg:
-      - "=========================================="
-      - "CVE-2026-31431 (Copy Fail) Assessment"
-      - "=========================================="
-      - "Host: {{ inventory_hostname }}"
-      - "Kernel Version: {{ cve_assessment.kernel_version }}"
-      - "Status: {{ vulnerability_status | trim }}"
-      - ""
-      - "Details:"
-      - "  - Kernel in vulnerable range (>=4.10): {{ cve_assessment.kernel_in_vulnerable_range }}"
-      - "  - algif_aead module exists: {{ cve_assessment.algif_aead_module_exists }}"
-      - "  - algif_aead currently loaded: {{ cve_assessment.algif_aead_currently_loaded }}"
-      - "{% if cve_assessment.algif_aead_currently_loaded and cve_assessment.dependent_modules not in ['NONE', 'MODULE_NOT_LOADED'] %}  - Dependent modules: {{ cve_assessment.dependent_modules }}{% endif %}"
-      - "  - Active AF_ALG sockets: {{ cve_assessment.active_af_alg_sockets }}"
-      - "  - Module blacklisted: {{ cve_assessment.algif_aead_blacklisted }}"
-      - "  - SELinux policy installed: {{ cve_assessment.selinux_policy_installed }}"
-      - "  - Services with seccomp: {{ cve_assessment.seccomp_services_count }}"
-      - ""
-      - "{% if cve_assessment.actively_exploitable %}IMMEDIATE ACTION REQUIRED: System is actively vulnerable!{% endif %}"
-      - "=========================================="
+- name: Write assessment summary to /root
+  ansible.builtin.copy:
+    content: |
+      ==========================================
+      CVE-2026-31431 (Copy Fail) Assessment
+      ==========================================
+      Host: {{ inventory_hostname }}
+      Kernel Version: {{ cve_assessment.kernel_version }}
+      Status: {{ vulnerability_status | trim }}
+
+      Details:
+        - Kernel in vulnerable range (>=4.10): {{ cve_assessment.kernel_in_vulnerable_range }}
+        - algif_aead module exists: {{ cve_assessment.algif_aead_module_exists }}
+        - algif_aead currently loaded: {{ cve_assessment.algif_aead_currently_loaded }}
+      {% if cve_assessment.algif_aead_currently_loaded and cve_assessment.dependent_modules not in ['NONE', 'MODULE_NOT_LOADED'] %}  - Dependent modules: {{ cve_assessment.dependent_modules }}
+      {% endif %}  - Active AF_ALG sockets: {{ cve_assessment.active_af_alg_sockets }}
+        - Module blacklisted: {{ cve_assessment.algif_aead_blacklisted }}
+        - SELinux policy installed: {{ cve_assessment.selinux_policy_installed }}
+        - Services with seccomp: {{ cve_assessment.seccomp_services_count }}
+
+      {% if cve_assessment.actively_exploitable %}IMMEDIATE ACTION REQUIRED: System is actively vulnerable!
+      {% endif %}==========================================
+    dest: /root/cve-2026-31431-assessment-{{ inventory_hostname }}.txt
+    mode: '0600'
+    owner: root
+    group: root
+
+- name: Brief assessment output
+  ansible.builtin.debug:
+    msg: "{{ inventory_hostname }}: {{ vulnerability_status | trim }}"
 
 - name: Flag vulnerable hosts
-  set_fact:
+  ansible.builtin.set_fact:
     vulnerable_host: true
+  when:
+    - cve_assessment.potentially_vulnerable | bool
+    - not (
+        (cve_assessment.algif_aead_blacklisted | bool) and
+        (
+          (cve_assessment.selinux_policy_installed | bool) or
+          ((cve_assessment.seccomp_services_count | int) > 0)
+        )
+      )
+
+- name: Calculate recommended mitigation flags for this host
+  ansible.builtin.set_fact:
+    recommended_mitigation_flags: "{{
+      3 if (ansible_selinux.status is defined and ansible_selinux.status == 'enabled')
+      else 1
+    }}"
+  when:
+    - cve_assessment.potentially_vulnerable
+    - not cve_assessment.algif_aead_blacklisted
+
+- name: Append recommended mitigation to assessment file
+  ansible.builtin.blockinfile:
+    path: /root/cve-2026-31431-assessment-{{ inventory_hostname }}.txt
+    marker: ""
+    block: |
+
+      Recommended Mitigation: Flag {{ recommended_mitigation_flags }}
+      {% if recommended_mitigation_flags | int == 3 %}  - Module Blacklist (1) + SELinux (2)
+        Rationale: SELinux is enabled on this system
+      {% elif recommended_mitigation_flags | int == 1 %}  - Module Blacklist (1) only
+        Rationale: SELinux not available on this system
+        ⚠ Consider enabling SELinux for stronger protection
+      {% endif %}
+    insertafter: EOF
+    create: false
   when:
     - cve_assessment.potentially_vulnerable
     - not cve_assessment.algif_aead_blacklisted

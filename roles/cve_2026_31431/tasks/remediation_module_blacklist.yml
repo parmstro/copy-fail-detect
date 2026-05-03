@@ -2,21 +2,21 @@
 # Module blacklist remediation for CVE-2026-31431
 
 - name: "MODULE BLACKLIST - Unload algif_aead module if currently loaded"
-  command: rmmod algif_aead
+  ansible.builtin.command: rmmod algif_aead
   register: rmmod_result
   failed_when: false
   when: cve_assessment.algif_aead_currently_loaded
   notify: Module blacklist applied
 
 - name: "MODULE BLACKLIST - Display unload result"
-  debug:
+  ansible.builtin.debug:
     msg: "algif_aead module unloaded: {{ rmmod_result.rc == 0 }}"
   when:
     - cve_assessment.algif_aead_currently_loaded
     - rmmod_result.rc is defined
 
 - name: "MODULE BLACKLIST - Create blacklist configuration"
-  template:
+  ansible.builtin.template:
     src: blacklist.conf.j2
     dest: "{{ modprobe_config_dir }}/{{ blacklist_config_file }}"
     mode: '0644'
@@ -26,7 +26,7 @@
   notify: Module blacklist applied
 
 - name: "MODULE BLACKLIST - Update initramfs (Debian/Ubuntu)"
-  command: update-initramfs -u
+  ansible.builtin.command: update-initramfs -u
   when:
     - blacklist_created is defined
     - blacklist_created is changed
@@ -34,17 +34,17 @@
   notify: Module blacklist applied
 
 - name: "MODULE BLACKLIST - Update initrd (RedHat/CentOS/Fedora)"
-  command: dracut -f
+  ansible.builtin.command: dracut -f
   when:
     - blacklist_created is defined
     - blacklist_created is changed
     - ansible_os_family == "RedHat"
   notify: Module blacklist applied
 
-- name: "MODULE BLACKLIST - Verify module cannot be loaded"
-  command: modprobe algif_aead
+- name: "MODULE BLACKLIST - Attempt to load module (should run /bin/true instead)"
+  ansible.builtin.command: modprobe algif_aead
   register: modprobe_test
-  failed_when: modprobe_test.rc == 0
+  failed_when: false
   changed_when: false
   when:
     - cve_assessment.algif_aead_module_exists
@@ -52,7 +52,7 @@
     - blacklist_created is changed
 
 - name: "MODULE BLACKLIST - Re-verify algif_aead is not loaded"
-  shell: lsmod | grep algif_aead
+  ansible.builtin.shell: lsmod | grep algif_aead
   register: post_remediation_check
   changed_when: false
   failed_when: post_remediation_check.rc == 0
@@ -62,7 +62,7 @@
     - blacklist_created is changed
 
 - name: "MODULE BLACKLIST - Display success message"
-  debug:
+  ansible.builtin.debug:
     msg:
       - "=========================================="
       - "MODULE BLACKLIST REMEDIATION SUCCESSFUL"
@@ -82,7 +82,7 @@
     - blacklist_created is changed
 
 - name: Set module blacklist remediation flag
-  set_fact:
+  ansible.builtin.set_fact:
     remediation_module_blacklist_applied: true
   when:
     - blacklist_created is defined

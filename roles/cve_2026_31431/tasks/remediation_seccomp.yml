@@ -2,22 +2,22 @@
 # systemd seccomp remediation for CVE-2026-31431
 
 - name: "SECCOMP - Detect running systemd services"
-  shell: systemctl list-units --type=service --state=running --no-pager --no-legend | awk '{print $1}' | sed 's/.service$//'
+  ansible.builtin.shell: systemctl list-units --type=service --state=running --no-pager --no-legend | awk '{print $1}' | sed 's/.service$//'
   register: running_services
   changed_when: false
 
 - name: "SECCOMP - Filter services to protect"
-  set_fact:
+  ansible.builtin.set_fact:
     services_to_protect: "{{ seccomp_protected_services | intersect(running_services.stdout_lines) }}"
 
 - name: "SECCOMP - Display services to be protected"
-  debug:
+  ansible.builtin.debug:
     msg:
       - "systemd services to protect: {{ services_to_protect | length }}"
       - "{{ services_to_protect | join(', ') if services_to_protect | length > 0 else 'None found' }}"
 
 - name: "SECCOMP - Create drop-in directory for each service"
-  file:
+  ansible.builtin.file:
     path: "{{ systemd_dropin_dir }}/{{ item }}.service.d"
     state: directory
     mode: '0755'
@@ -27,7 +27,7 @@
   when: services_to_protect | length > 0
 
 - name: "SECCOMP - Create seccomp drop-in configuration"
-  template:
+  ansible.builtin.template:
     src: seccomp_dropin.conf.j2
     dest: "{{ systemd_dropin_dir }}/{{ item }}.service.d/{{ seccomp_dropin_file }}"
     mode: '0644'
@@ -41,12 +41,12 @@
     - Restart protected services
 
 - name: "SECCOMP - Reload systemd daemon"
-  systemd:
+  ansible.builtin.systemd:
     daemon_reload: true
   when: seccomp_dropins_created is changed
 
 - name: "SECCOMP - Verify seccomp restrictions"
-  shell: systemctl show {{ item }}.service | grep "RestrictAddressFamilies"
+  ansible.builtin.shell: systemctl show {{ item }}.service | grep "RestrictAddressFamilies"
   loop: "{{ services_to_protect }}"
   register: seccomp_verification
   changed_when: false
@@ -56,7 +56,7 @@
     - seccomp_dropins_created is changed
 
 - name: "SECCOMP - Restart services to apply seccomp filters"
-  systemd:
+  ansible.builtin.systemd:
     name: "{{ item }}.service"
     state: restarted
   loop: "{{ services_to_protect }}"
@@ -66,7 +66,7 @@
   register: services_restarted
 
 - name: "SECCOMP - Test service status after restart"
-  systemd:
+  ansible.builtin.systemd:
     name: "{{ item }}.service"
   loop: "{{ services_to_protect }}"
   register: service_status
@@ -76,7 +76,7 @@
     - services_restarted is changed
 
 - name: "SECCOMP - Display success message"
-  debug:
+  ansible.builtin.debug:
     msg:
       - "=========================================="
       - "SECCOMP REMEDIATION SUCCESSFUL"
@@ -105,7 +105,7 @@
     - seccomp_dropins_created is changed
 
 - name: "SECCOMP - Warn if no services found"
-  debug:
+  ansible.builtin.debug:
     msg:
       - "WARNING: No services from the protection list are currently running"
       - "Protected services list: {{ seccomp_protected_services | join(', ') }}"
@@ -113,7 +113,7 @@
   when: services_to_protect | length == 0
 
 - name: Set seccomp remediation flag
-  set_fact:
+  ansible.builtin.set_fact:
     remediation_seccomp_applied: true
     remediation_seccomp_service_count: "{{ services_to_protect | length }}"
   when: services_to_protect | length > 0
