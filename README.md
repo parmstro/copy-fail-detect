@@ -446,6 +446,8 @@ inventory_output/
 
 ### Critical Finding: Standard RHEL Cryptography Is NOT Affected
 
+**Confidence Level**: ⭐⭐⭐⭐⭐ **HIGH** - See [IPsec/XFRM Validation Report](docs/IPSEC_VALIDATION.md) for comprehensive analysis
+
 **Good news for Enterprise Linux deployments:** Based on authoritative sources including [CERT-EU](https://cert.europa.eu/publications/security-advisories/2026-005/), [CloudLinux](https://blog.cloudlinux.com/cve-2026-31431-copy-fail-mitigation-and-patches), and [HPCsec](https://www.hpcsec.com/2026/04/30/advisory-cve-2026-31431-copy-fail-local-privilege-escalation-via-af-alg-algif_aead/), **cfDr's mitigations have minimal to zero impact** on standard RHEL system cryptography and services.
 
 ### What Is NOT Affected
@@ -457,7 +459,7 @@ The following critical RHEL cryptographic systems **do not use AF_ALG** and are 
 | Service/Component | Function | Status |
 |------------------|----------|--------|
 | **dm-crypt / LUKS** | Full disk encryption | ✅ Unaffected |
-| **IPsec** | VPN and encrypted networking | ✅ Unaffected |
+| **IPsec / XFRM** | VPN and encrypted networking | ✅ Unaffected ([validated](docs/IPSEC_VALIDATION.md)) |
 | **kTLS** | Kernel TLS implementation | ✅ Unaffected |
 | **SSH** | Secure shell connections | ✅ Unaffected |
 
